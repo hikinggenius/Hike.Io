@@ -1,0 +1,1216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hike.io — Trail Planner</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1B3A2B">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Hike.io">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@400;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  :root {
+    --pine: #1B3A2B; --pine-light: #24503A; --moss: #4A6B4C;
+    --tan: #ECE5D2; --tan-deep: #DDD2B4; --bark: #5C4A3A;
+    --blaze-blue: #2F6DB0; --blaze-orange: #C1652C; --blaze-red: #C0392B; --ink: #22281F; --paper: #F7F4EA;
+    --card-bg: #FFFFFF;
+  }
+  body.dark-mode {
+    --paper: #12160F; --tan: #1D2419; --tan-deep: #2A3324; --bark: #C9C2B0; --ink: #EDEAE0; --card-bg: #1A211A;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font-family: 'Inter', sans-serif; line-height: 1.5; transition: background 0.2s ease, color 0.2s ease; }
+  h1, h2, h3, h4 { font-family: 'Zilla Slab', serif; margin: 0; }
+  .mono { font-family: 'IBM Plex Mono', monospace; }
+
+  @keyframes fadeInUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes pulseGlow { 0%,100% { opacity: 0.55; } 50% { opacity: 1; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes scaleIn { from { opacity: 0; transform: scale(0.94) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+  @keyframes shimmer { 0% { background-position: -300px 0; } 100% { background-position: 300px 0; } }
+
+  .blaze { display: inline-block; width: 10px; height: 22px; border-radius: 2px; flex-shrink: 0; animation: pulseGlow 3s ease-in-out infinite; }
+  .blaze.blue { background: var(--blaze-blue); }
+  .blaze.orange { background: var(--blaze-orange); }
+  .blaze.green { background: var(--moss); }
+  .blaze.red { background: var(--blaze-red); }
+
+  /* ---------- Hero: real photo background ---------- */
+  .hero {
+    background: var(--pine) center/cover no-repeat;
+    color: var(--paper); padding: 4.5rem 1.5rem 3.5rem; position: relative; overflow: hidden;
+    transition: background-image 0.6s ease;
+  }
+  .hero::before {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(180deg, rgba(10,20,14,0.72) 0%, rgba(10,20,14,0.6) 45%, rgba(10,20,14,0.85) 100%);
+    pointer-events: none;
+  }
+  .hero-inner { max-width: 780px; margin: 0 auto; position: relative; z-index: 1; animation: fadeInUp 0.7s ease both; }
+  .eyebrow { display: flex; align-items: center; gap: 0.6rem; text-transform: uppercase; letter-spacing: 0.14em; font-size: 0.72rem; color: #C9D9C4; margin-bottom: 1rem; }
+  .hero h1 { font-size: clamp(2.1rem, 5vw, 3.2rem); font-weight: 700; line-height: 1.05; margin-bottom: 0.7rem; text-shadow: 0 2px 12px rgba(0,0,0,0.35); }
+  .hero .tagline { font-size: 1.1rem; font-style: italic; color: #E7C9A9; font-family: 'Zilla Slab', serif; margin-bottom: 1rem; text-shadow: 0 1px 8px rgba(0,0,0,0.3); }
+  .hero p.sub { font-size: 1rem; color: #D8E0D2; max-width: 46ch; margin-bottom: 2rem; }
+
+  .top-toggles { position: absolute; top: 1rem; right: 1.2rem; z-index: 2; display: flex; gap: 0.5rem; }
+  .toggle-btn {
+    background: rgba(255,255,255,0.14); border: none; color: white; width: 36px; height: 36px;
+    border-radius: 8px; cursor: pointer; font-size: 1rem; transition: background 0.15s ease;
+  }
+  .toggle-btn:hover { background: rgba(255,255,255,0.26); }
+  .toggle-btn[aria-pressed="true"] { background: var(--blaze-orange); }
+
+  .search-row { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+  .search-row input { flex: 1; min-width: 220px; padding: 0.85rem 1rem; border-radius: 6px; border: 2px solid transparent; font-family: 'Inter', sans-serif; font-size: 1rem; background: var(--paper); color: var(--ink); transition: box-shadow 0.15s ease; }
+  .search-row input:focus { outline: none; border-color: var(--blaze-orange); box-shadow: 0 0 0 4px rgba(193,101,44,0.18); }
+  .search-row button { padding: 0.85rem 1.2rem; background: var(--blaze-orange); color: white; border: none; border-radius: 6px; font-weight: 600; font-size: 1rem; cursor: pointer; transition: background 0.15s ease, transform 0.1s ease; white-space: nowrap; }
+  .search-row button:hover { background: #A5541F; transform: translateY(-1px); }
+  .search-row button:active { transform: translateY(0); }
+  #locBtn { background: rgba(255,255,255,0.14); }
+  #locBtn:hover { background: rgba(255,255,255,0.25); }
+  .search-row button:focus-visible, .search-row input:focus-visible { outline: 3px solid #C9D9C4; outline-offset: 2px; }
+  .hint { font-size: 0.85rem; color: #AFC2A8; margin-top: 0.6rem; }
+
+  main { max-width: 1120px; margin: 0 auto; padding: 0 1.5rem; }
+
+  .status-line { display: flex; align-items: center; gap: 0.7rem; margin: 2.2rem 0 1rem; font-size: 0.95rem; color: var(--bark); animation: fadeIn 0.4s ease; flex-wrap: wrap; }
+  .status-line.error { color: #C0392B; }
+  .spinner { width: 14px; height: 14px; border: 2px solid var(--tan-deep); border-top-color: var(--blaze-orange); border-radius: 50%; animation: spin 0.7s linear infinite; }
+  .retry-btn { background: var(--pine); color: white; border: none; border-radius: 6px; padding: 0.3rem 0.7rem; font-size: 0.8rem; cursor: pointer; }
+  .retry-btn:hover { background: var(--pine-light); }
+
+  #weatherCard { display: none; background: var(--card-bg); border: 1px solid var(--tan-deep); border-radius: 10px; padding: 1.4rem 1.6rem; margin-bottom: 1.5rem; flex-direction: column; gap: 1.1rem; animation: fadeInUp 0.4s ease both; }
+  #weatherCard.show { display: flex; }
+  .weather-top { display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: center; }
+  .weather-stat { display: flex; flex-direction: column; gap: 0.15rem; }
+  .weather-stat .label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--moss); }
+  .weather-stat .val { font-size: 1.3rem; font-weight: 600; }
+  .weather-emoji { font-size: 2.2rem; line-height: 1; }
+
+  .forecast-strip { display: flex; gap: 0.7rem; border-top: 1px solid var(--tan); padding-top: 1rem; }
+  .forecast-day { flex: 1; text-align: center; background: var(--paper); border-radius: 8px; padding: 0.6rem 0.4rem; }
+  .forecast-day .d { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--bark); font-weight: 600; }
+  .forecast-day .e { font-size: 1.4rem; margin: 0.2rem 0; }
+  .forecast-day .t { font-size: 0.8rem; font-weight: 600; }
+  .forecast-day .p { font-size: 0.7rem; color: var(--blaze-blue); }
+
+  section h2 { font-size: 1.4rem; color: var(--pine); display: flex; align-items: center; gap: 0.6rem; margin-bottom: 1rem; }
+  body.dark-mode section h2 { color: #9FD3A8; }
+
+  #radarSection { display: none; margin-bottom: 2rem; animation: fadeInUp 0.4s ease both; }
+  #radarMapContainer { height: 320px; border-radius: 10px; overflow: hidden; border: 1px solid var(--tan-deep); }
+  .radar-controls { display: flex; align-items: center; gap: 0.8rem; margin-top: 0.7rem; background: var(--card-bg); border: 1px solid var(--tan-deep); border-radius: 8px; padding: 0.6rem 0.9rem; }
+  .radar-controls button { background: var(--pine); color: white; border: none; border-radius: 6px; padding: 0.4rem 0.8rem; font-size: 0.85rem; cursor: pointer; transition: background 0.15s ease; }
+  .radar-controls button:hover { background: var(--pine-light); }
+  #radarSlider { flex: 1; accent-color: var(--blaze-blue); }
+  #radarTimeLabel { font-size: 0.8rem; color: var(--bark); min-width: 70px; text-align: right; }
+
+  #filterBar { display: none; flex-wrap: wrap; gap: 1.5rem; align-items: center; background: var(--card-bg); border: 1px solid var(--tan-deep); border-radius: 10px; padding: 1rem 1.3rem; margin-bottom: 1.3rem; }
+  #filterBar.show { display: flex; animation: fadeInUp 0.4s ease both; }
+  .filter-group { display: flex; align-items: center; gap: 0.6rem; }
+  .filter-label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--bark); font-weight: 600; }
+  .chip { padding: 0.32rem 0.75rem; border-radius: 20px; border: 1.5px solid var(--tan-deep); background: var(--paper); color: var(--ink); font-size: 0.82rem; cursor: pointer; transition: all 0.15s ease; font-family: 'Inter', sans-serif; }
+  .chip.active { background: var(--moss); border-color: var(--moss); color: white; }
+  .chip.fav-chip.active { background: var(--blaze-orange); border-color: var(--blaze-orange); }
+  .chip:hover { border-color: var(--moss); }
+  #distanceSlider { accent-color: var(--blaze-orange); width: 140px; }
+  .distance-val { font-size: 0.85rem; font-weight: 600; color: var(--pine); min-width: 60px; }
+  body.dark-mode .distance-val { color: #9FD3A8; }
+
+  #trailList { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; margin-bottom: 3rem; }
+  .trail-card { background: var(--card-bg); border: 1px solid var(--tan-deep); border-radius: 10px; overflow: hidden; cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease; animation: fadeInUp 0.5s ease both; }
+  .trail-card:hover, .trail-card:focus-visible { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(27,58,43,0.14); border-color: var(--moss); }
+
+  .trail-img-wrap { position: relative; height: 150px; background: linear-gradient(90deg, var(--tan-deep) 25%, var(--tan) 37%, var(--tan-deep) 63%); background-size: 400px 100%; animation: shimmer 1.4s ease-in-out infinite; overflow: hidden; }
+  .trail-img-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.35s ease, opacity 0.3s ease; opacity: 0; }
+  .trail-img-wrap img.loaded { opacity: 1; }
+  .trail-card:hover .trail-img-wrap img.loaded { transform: scale(1.06); }
+  .trail-img-wrap .open-hint {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: linear-gradient(transparent, rgba(0,0,0,0.55));
+    color: white; font-size: 0.72rem; padding: 0.9rem 0.7rem 0.4rem;
+    display: flex; align-items: center; gap: 0.3rem; opacity: 0; transition: opacity 0.2s ease;
+  }
+  .trail-card:hover .open-hint { opacity: 1; }
+  .placeholder-icon { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 2.2rem; opacity: 0.5; z-index: 1; }
+  .fav-btn {
+    position: absolute; top: 0.5rem; right: 0.5rem; z-index: 2;
+    width: 32px; height: 32px; border-radius: 50%; border: none;
+    background: rgba(255,255,255,0.85); font-size: 1rem; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; transition: transform 0.12s ease, background 0.12s ease;
+  }
+  .fav-btn:hover { transform: scale(1.1); }
+  .fav-btn.active { background: var(--blaze-orange); }
+
+  .trail-card-body { padding: 1.1rem 1.2rem; }
+  .trail-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.6rem; }
+  .trail-card h3 { font-size: 1.05rem; color: var(--ink); margin-bottom: 0.15rem; }
+  .trail-park { font-size: 0.8rem; color: var(--bark); margin-bottom: 0.5rem; }
+  .diff-tag { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; padding: 0.2rem 0.5rem; border-radius: 4px; white-space: nowrap; }
+  .diff-easy { background: #DCEBD8; color: #2F5C31; }
+  .diff-moderate { background: #DCE7F2; color: var(--blaze-blue); }
+  .diff-hard { background: #F1DAD2; color: #8C2F1B; }
+
+  .trail-stats { display: flex; gap: 1.1rem; margin-top: 0.6rem; font-size: 0.85rem; }
+  .trail-stats span { display: flex; flex-direction: column; }
+  .trail-stats .n { font-weight: 600; }
+  .trail-stats .l { font-size: 0.66rem; color: var(--bark); text-transform: uppercase; letter-spacing: 0.05em; }
+  .trail-dist { margin-top: 0.6rem; font-size: 0.8rem; color: var(--moss); font-weight: 600; }
+  .no-results { grid-column: 1/-1; text-align: center; padding: 2rem; color: var(--bark); font-style: italic; }
+
+  footer { text-align: center; font-size: 0.78rem; color: var(--bark); padding: 2rem 1rem 3rem; }
+
+  .trail-modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(20,35,26,0.6);
+    z-index: 200; align-items: center; justify-content: center; padding: 1.2rem;
+  }
+  .trail-modal-overlay.show { display: flex; animation: fadeIn 0.2s ease; }
+  body.modal-open { overflow: hidden; }
+
+  .trail-gui {
+    background: var(--paper); border-radius: 14px; width: 100%; max-width: 640px;
+    height: min(88vh, 820px); display: flex; flex-direction: column; overflow: hidden;
+    box-shadow: 0 30px 60px rgba(0,0,0,0.35);
+    animation: scaleIn 0.28s cubic-bezier(0.2,0.9,0.3,1) both;
+  }
+  .gui-topbar {
+    background: var(--pine); color: var(--paper); padding: 1rem 1.2rem;
+    display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; gap: 0.6rem;
+  }
+  .gui-topbar-title h3 { font-size: 1.15rem; }
+  .gui-topbar-title .sub { font-size: 0.8rem; color: #C9D9C4; margin-top: 0.15rem; }
+  .gui-topbar-actions { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
+  .directions-btn {
+    background: rgba(255,255,255,0.14); color: white; border: none; border-radius: 8px;
+    padding: 0.45rem 0.7rem; font-size: 0.78rem; cursor: pointer; text-decoration: none;
+    display: flex; align-items: center; gap: 0.3rem; transition: background 0.15s ease; white-space: nowrap;
+  }
+  .directions-btn:hover { background: rgba(255,255,255,0.26); }
+  .share-btn {
+    background: rgba(255,255,255,0.14); border: none; color: white; width: 34px; height: 34px; border-radius: 8px;
+    cursor: pointer; font-size: 1rem; transition: background 0.15s ease; flex-shrink: 0;
+  }
+  .share-btn:hover { background: rgba(255,255,255,0.26); }
+  .gui-fav-btn { background: rgba(255,255,255,0.14); border: none; color: white; width: 34px; height: 34px; border-radius: 8px; cursor: pointer; font-size: 1rem; transition: background 0.15s ease; flex-shrink: 0; }
+  .gui-fav-btn.active { background: var(--blaze-orange); }
+  .gui-close { background: rgba(255,255,255,0.12); border: none; color: white; width: 34px; height: 34px; border-radius: 8px; cursor: pointer; font-size: 1rem; transition: background 0.15s ease; flex-shrink: 0; }
+  .gui-close:hover { background: rgba(255,255,255,0.25); }
+
+  .gui-map { height: 220px; flex-shrink: 0; position: relative; }
+  .gui-scroll { flex: 1; overflow-y: auto; padding: 1.4rem 1.4rem 2rem; }
+  .gui-scroll::-webkit-scrollbar { width: 8px; }
+  .gui-scroll::-webkit-scrollbar-thumb { background: var(--tan-deep); border-radius: 4px; }
+
+  .gui-section-label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--moss); font-weight: 700; margin: 1.4rem 0 0.7rem; display: flex; align-items: center; gap: 0.5rem; }
+  .gui-section-label:first-child { margin-top: 0; }
+
+  .elev-chart-wrap { background: var(--card-bg); border: 1px solid var(--tan-deep); border-radius: 10px; padding: 0.8rem 1rem; }
+  .elev-chart { width: 100%; height: 60px; display: block; }
+  .elev-chart-labels { display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--bark); margin-top: 0.3rem; }
+
+  .gear-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.9rem; }
+  .gear-photo-card {
+    background: var(--card-bg); border: 1px solid var(--tan-deep); border-radius: 10px; overflow: hidden;
+    animation: fadeInUp 0.4s ease both; transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .gear-photo-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(27,58,43,0.12); }
+  .gear-photo-wrap { height: 100px; background: linear-gradient(90deg, var(--tan-deep) 25%, var(--tan) 37%, var(--tan-deep) 63%); background-size: 400px 100%; animation: shimmer 1.4s ease-in-out infinite; position: relative; overflow: hidden; }
+  .gear-photo-wrap img { width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 0.3s ease; }
+  .gear-photo-wrap img.loaded { opacity: 1; }
+  .gear-photo-wrap .icon-fallback { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; opacity: 0.45; z-index: 1; }
+  .gear-card-body { padding: 0.6rem 0.7rem 0.75rem; }
+  .gear-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.3rem; }
+  .gear-name { font-size: 0.82rem; font-weight: 600; line-height: 1.25; }
+  .gear-tag { font-size: 0.56rem; text-transform: uppercase; font-weight: 700; letter-spacing: 0.04em; padding: 0.1rem 0.35rem; border-radius: 3px; white-space: nowrap; flex-shrink: 0; }
+  .tag-essential { background: var(--blaze-orange); color: white; }
+  .tag-recommended { background: var(--tan-deep); color: var(--bark); }
+  .gear-brand-line { font-size: 0.74rem; color: var(--bark); margin-top: 0.3rem; }
+  .gear-brand-line a { color: var(--blaze-blue); text-decoration: none; }
+  .gear-brand-line a:hover { text-decoration: underline; }
+  .gear-price { color: var(--pine); font-weight: 600; }
+  body.dark-mode .gear-price { color: #9FD3A8; }
+
+  .camp-photo-card { background: var(--card-bg); border: 1px solid var(--tan-deep); border-radius: 10px; overflow: hidden; animation: fadeInUp 0.4s ease both; }
+  .camp-photo-wrap { height: 150px; background: linear-gradient(90deg, var(--tan-deep) 25%, var(--tan) 37%, var(--tan-deep) 63%); background-size: 400px 100%; animation: shimmer 1.4s ease-in-out infinite; position: relative; overflow: hidden; }
+  .camp-photo-wrap img { width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 0.3s ease; }
+  .camp-photo-wrap img.loaded { opacity: 1; }
+  .camp-card-body { padding: 0.9rem 1rem 1.1rem; }
+  .camp-card-body h4 { font-size: 1rem; color: var(--pine); margin-bottom: 0.5rem; }
+  body.dark-mode .camp-card-body h4 { color: #9FD3A8; }
+  .camp-amenities { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+  .amenity { font-size: 0.72rem; background: var(--tan); border: 1px solid var(--tan-deep); padding: 0.15rem 0.5rem; border-radius: 4px; color: var(--bark); }
+  .no-camp { font-size: 0.88rem; color: var(--bark); font-style: italic; padding: 0.5rem 0; }
+
+  #offlineBanner {
+    display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 300;
+    background: var(--blaze-orange); color: white; text-align: center;
+    font-size: 0.82rem; padding: 0.5rem; animation: fadeIn 0.2s ease;
+  }
+  #offlineBanner.show { display: block; }
+
+  .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    * { animation-duration: 0.001s !important; transition-duration: 0.001s !important; }
+  }
+</style>
+</head>
+<body>
+
+<div id="offlineBanner" role="status">📡 You're offline — showing previously loaded trails, maps, and photos. Weather won't update until you're back online.</div>
+
+<div class="hero" id="heroEl">
+  <div class="top-toggles">
+    <button class="toggle-btn" id="unitToggle" type="button" aria-pressed="false" title="Switch units">mi</button>
+    <button class="toggle-btn" id="darkToggle" type="button" aria-pressed="false" title="Toggle dark mode">🌙</button>
+  </div>
+  <div class="hero-inner">
+    <div class="eyebrow"><span class="blaze blue"></span> Hike.io</div>
+    <h1>Find a trail. Know what to pack. Camp nearby.</h1>
+    <div class="tagline">For hikers, by hikers — completely free.</div>
+    <p class="sub">Enter any city or zip code in the U.S. for live weather, nearby named trails, and a gear list built for the day's conditions.</p>
+    <div class="search-row">
+      <input id="locationInput" type="text" placeholder="e.g. Asheville, NC or 97201" aria-label="City or zip code">
+      <button id="locBtn" type="button" title="Use my current location" aria-label="Use my current location">📍</button>
+      <button id="searchBtn" type="button">Find trails</button>
+    </div>
+    <div class="hint">Weather from Open-Meteo · trails, elevation &amp; camping from OpenStreetMap — both live, nationwide.</div>
+  </div>
+</div>
+
+<main>
+  <div class="status-line" id="statusLine" style="display:none;" role="status" aria-live="polite"></div>
+  <div id="weatherCard"></div>
+
+  <section id="radarSection">
+    <h2><span class="blaze blue"></span> Precipitation radar</h2>
+    <div id="radarMapContainer" role="img" aria-label="Precipitation radar map"></div>
+    <div class="radar-controls">
+      <button id="radarPlay" type="button">▶ Play</button>
+      <input type="range" id="radarSlider" min="0" max="0" value="0" aria-label="Radar timeline scrubber">
+      <span id="radarTimeLabel" class="mono"></span>
+    </div>
+  </section>
+
+  <div id="filterBar">
+    <div class="filter-group" role="group" aria-label="Filter by difficulty">
+      <span class="filter-label">Difficulty</span>
+      <button class="chip active" data-diff="easy" type="button" aria-pressed="true">Easy</button>
+      <button class="chip active" data-diff="moderate" type="button" aria-pressed="true">Moderate</button>
+      <button class="chip active" data-diff="hard" type="button" aria-pressed="true">Hard</button>
+    </div>
+    <div class="filter-group">
+      <span class="filter-label">Within</span>
+      <input type="range" id="distanceSlider" min="2" max="60" value="20" aria-label="Maximum distance">
+      <span class="distance-val" id="distanceVal">20 mi</span>
+    </div>
+    <div class="filter-group">
+      <button class="chip fav-chip" id="favChip" type="button" aria-pressed="false">★ Favorites only</button>
+    </div>
+  </div>
+
+  <section id="trailSection" style="display:none;">
+    <h2><span class="blaze green"></span> Trails near you</h2>
+    <div id="trailList"></div>
+  </section>
+</main>
+
+<footer>Trail, elevation &amp; campsite data from OpenStreetMap contributors, queried live for your search radius. Photos via Wikimedia Commons (CC-licensed). Weather via Open-Meteo. Radar via RainViewer. Gear brands &amp; prices shown for illustration — check retailer sites for current pricing.</footer>
+
+<!-- Click-through trail GUI -->
+<div class="trail-modal-overlay" id="trailModalOverlay">
+  <div class="trail-gui" id="trailGui" role="dialog" aria-modal="true" aria-labelledby="guiTitle">
+    <div class="gui-topbar">
+      <div class="gui-topbar-title">
+        <h3 id="guiTitle"></h3>
+        <div class="sub" id="guiSub"></div>
+      </div>
+      <div class="gui-topbar-actions">
+        <button class="share-btn" id="shareBtn" type="button" title="Copy shareable link" aria-label="Copy shareable link">🔗</button>
+        <button class="gui-fav-btn" id="guiFavBtn" type="button" title="Save trail" aria-label="Save trail" aria-pressed="false">★</button>
+        <a class="directions-btn" id="directionsBtn" href="#" target="_blank" rel="noopener">🧭 Directions</a>
+        <button class="gui-close" id="guiClose" type="button" aria-label="Close">✕</button>
+      </div>
+    </div>
+    <div class="gui-map" id="guiMap"></div>
+    <div class="gui-scroll">
+      <div class="gui-section-label">📈 Elevation profile</div>
+      <div class="elev-chart-wrap" id="elevChartWrap"></div>
+      <div class="gui-section-label">🎒 Recommended gear</div>
+      <div class="gear-grid" id="gearGrid"></div>
+      <div class="gui-section-label">⛺ Nearby camping</div>
+      <div id="campSection"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------------- Real gear catalog (brand + product + approx price + photo search term) ---------------- */
+const GEAR_CATALOG = {
+  "Insulated jacket": { brand: "Patagonia", product: "Down Sweater Hoody", price: "~$279", icon: "🧥", url: "https://www.patagonia.com", searchTerm: "down jacket outdoor" },
+  "Thermal base layer": { brand: "Patagonia", product: "Capilene Thermal Weight", price: "~$79", icon: "👕", url: "https://www.patagonia.com", searchTerm: "thermal base layer clothing" },
+  "Warm hat & gloves": { brand: "The North Face", product: "Norm Beanie + Etip Gloves", price: "~$60", icon: "🧤", url: "https://www.thenorthface.com", searchTerm: "winter beanie gloves" },
+  "Moisture-wicking shirt": { brand: "The North Face", product: "Wander Short-Sleeve Tee", price: "~$45", icon: "👕", url: "https://www.thenorthface.com", searchTerm: "athletic t shirt hiking" },
+  "Sun hat": { brand: "Outdoor Research", product: "Sun Runner Cap", price: "~$35", icon: "🧢", url: "https://www.outdoorresearch.com", searchTerm: "hiking sun hat" },
+  "Lightweight shorts": { brand: "REI Co-op", product: "Sahara Shorts", price: "~$45", icon: "🩳", url: "https://www.rei.com", searchTerm: "hiking shorts outdoor" },
+  "Breathable layered shirt": { brand: "The North Face", product: "Class V Explore Shirt", price: "~$55", icon: "👕", url: "https://www.thenorthface.com", searchTerm: "hiking shirt layer" },
+  "Light packable layer": { brand: "Patagonia", product: "Micro Puff Jacket", price: "~$259", icon: "🧥", url: "https://www.patagonia.com", searchTerm: "packable puffer jacket" },
+  "Rain shell": { brand: "Patagonia", product: "Torrentshell 3L Jacket", price: "~$189", icon: "🌧️", url: "https://www.patagonia.com", searchTerm: "rain jacket hiking" },
+  "Windbreaker": { brand: "The North Face", product: "Wind Jacket", price: "~$99", icon: "💨", url: "https://www.thenorthface.com", searchTerm: "windbreaker jacket outdoor" },
+  "Hiking boots (ankle support)": { brand: "Salomon", product: "X Ultra 4 Mid GTX", price: "~$150", icon: "🥾", url: "https://www.salomon.com", searchTerm: "hiking boots" },
+  "Trekking poles": { brand: "Black Diamond", product: "Trail Trekking Poles", price: "~$100", icon: "🥢", url: "https://www.blackdiamondequipment.com", searchTerm: "trekking poles hiking" },
+  "Trail runners / sneakers": { brand: "Merrell", product: "Moab 3", price: "~$120", icon: "👟", url: "https://www.merrell.com", searchTerm: "trail running shoes" },
+  "Moisture-wicking socks": { brand: "Darn Tough", product: "Hiker Micro Crew", price: "~$26", icon: "🧦", url: "https://darntough.com", searchTerm: "wool hiking socks" },
+  "Water (2L minimum)": { brand: "Nalgene / Hydro Flask", product: "Wide Mouth Bottle or Bladder", price: "~$20–$40", icon: "💧", url: "https://www.rei.com", searchTerm: "water bottle hiking" },
+  "Offline trail map": { brand: "AllTrails / Gaia GPS", product: "Offline Map Download", price: "Free–$36/yr", icon: "🗺️", url: "https://www.alltrails.com", searchTerm: "trail map compass" },
+  "Pack rain cover": { brand: "Osprey", product: "Ultralight Raincover", price: "~$35", icon: "☔", url: "https://www.osprey.com", searchTerm: "backpack rain cover" },
+  "Trail snacks / electrolytes": { brand: "Liquid I.V.", product: "Hydration Multiplier (16-pack)", price: "~$25", icon: "🍫", url: "https://www.liquid-iv.com", searchTerm: "trail snacks energy bars" },
+  "First-aid kit": { brand: "Adventure Medical Kits", product: "Ultralight/Watertight .7", price: "~$25", icon: "🩹", url: "https://www.adventuremedicalkits.com", searchTerm: "first aid kit outdoor" },
+};
+
+const FAVORITES_KEY = 'hikeio_favorites';
+const LAST_QUERY_KEY = 'hikeio_last_query';
+const UNITS_KEY = 'hikeio_units';
+const DARK_KEY = 'hikeio_dark';
+const FETCH_RADIUS_CAP_MILES = 60;
+
+let currentWeather = null;
+let allTrails = [];
+let allCampsites = [];
+let searchLoc = null;
+let leafletMap = null;
+let leafletMarker = null;
+let trailPathLayer = null;
+let currentTrail = null;
+let lastFocusedElement = null;
+let pendingTrailId = null;
+let units = localStorage.getItem(UNITS_KEY) || 'imperial';
+const imageCache = {};
+
+let radarMap = null;
+let radarLayer = null;
+let radarFrames = [];
+let radarHost = '';
+let radarIndex = 0;
+let radarPlaying = false;
+let radarInterval = null;
+
+/* ---------------- Favorites ---------------- */
+function getFavorites() { try { return JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]'); } catch (e) { return []; } }
+function isFavorite(id) { return getFavorites().includes(id); }
+function toggleFavorite(id) {
+  let favs = getFavorites();
+  favs = favs.includes(id) ? favs.filter(n => n !== id) : [...favs, id];
+  localStorage.setItem(FAVORITES_KEY, JSON.stringify(favs));
+}
+
+/* ---------------- Helpers ---------------- */
+function haversineMiles(lat1, lon1, lat2, lon2) {
+  const R = 3958.8;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function setStatus(msg, isError, loading, retryFn) {
+  const el = document.getElementById('statusLine');
+  el.style.display = 'flex';
+  el.className = 'status-line' + (isError ? ' error' : '');
+  el.innerHTML = (loading ? '<span class="spinner"></span>' : '') + `<span>${msg}</span>`;
+  if (retryFn) {
+    const btn = document.createElement('button');
+    btn.textContent = 'Try again';
+    btn.className = 'retry-btn';
+    btn.type = 'button';
+    btn.addEventListener('click', retryFn);
+    el.appendChild(btn);
+  }
+}
+
+function weatherEmoji(code) {
+  if (code === 0) return '☀️';
+  if ([1, 2].includes(code)) return '⛅';
+  if (code === 3) return '☁️';
+  if ([45, 48].includes(code)) return '🌫️';
+  if ([51, 53, 55, 56, 57].includes(code)) return '🌦️';
+  if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return '🌧️';
+  if ([71, 73, 75, 77, 85, 86].includes(code)) return '🌨️';
+  if ([95, 96, 99].includes(code)) return '⛈️';
+  return '🌡️';
+}
+
+/* Unit-aware formatting. Internally everything stays in miles/feet; only display converts. */
+function fmtDist(miles) {
+  if (miles === null || miles === undefined) return '—';
+  return units === 'imperial' ? `${miles} mi` : `${Math.round(miles * 1.60934 * 10) / 10} km`;
+}
+function fmtElev(feet) {
+  if (feet === null || feet === undefined) return null;
+  return units === 'imperial' ? `${feet} ft` : `${Math.round(feet * 0.3048)} m`;
+}
+
+/* ---------------- API calls ---------------- */
+async function geocode(query) {
+  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=1&country=US`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Geocoding request failed');
+  const data = await res.json();
+  if (!data.results || data.results.length === 0) throw new Error('Location not found');
+  const r = data.results[0];
+  return { lat: r.latitude, lon: r.longitude, label: `${r.name}, ${r.admin1 || ''}`.trim() };
+}
+
+async function reverseGeocode(lat, lon) {
+  try {
+    const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`;
+    const res = await fetch(url);
+    const data = await res.json();
+    return data.city || data.locality || 'Your location';
+  } catch (e) {
+    return 'Your location';
+  }
+}
+
+async function getWeather(lat, lon) {
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timezone=auto`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Weather request failed');
+  const data = await res.json();
+  const daily = data.daily.time.slice(0, 3).map((t, i) => ({
+    date: t,
+    code: data.daily.weather_code[i],
+    tempMax: Math.round(data.daily.temperature_2m_max[i]),
+    tempMin: Math.round(data.daily.temperature_2m_min[i]),
+    precipProb: data.daily.precipitation_probability_max[i],
+  }));
+  return {
+    currentTemp: Math.round(data.current.temperature_2m),
+    currentCode: data.current.weather_code,
+    tempMax: daily[0].tempMax,
+    tempMin: daily[0].tempMin,
+    precipProb: daily[0].precipProb,
+    windMax: Math.round(data.daily.wind_speed_10m_max[0]),
+    daily,
+  };
+}
+
+async function fetchImage(searchTerm) {
+  if (imageCache[searchTerm] !== undefined) return imageCache[searchTerm];
+  try {
+    const url = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(searchTerm)}&gsrlimit=1&gsrnamespace=6&prop=imageinfo&iiprop=url&iiurlwidth=500&format=json&origin=*`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const pages = data.query && data.query.pages;
+    if (!pages) { imageCache[searchTerm] = null; return null; }
+    const page = Object.values(pages)[0];
+    const imgUrl = page.imageinfo && page.imageinfo[0] && page.imageinfo[0].thumburl;
+    imageCache[searchTerm] = imgUrl || null;
+    return imgUrl || null;
+  } catch (e) {
+    imageCache[searchTerm] = null;
+    return null;
+  }
+}
+
+/* ---------------- Session-cached Overpass lookups ---------------- */
+function overpassCacheKey(kind, lat, lon, radius) {
+  return `hikeio_${kind}::${lat.toFixed(2)},${lon.toFixed(2)},${radius}`;
+}
+function readSessionCache(key) {
+  try { const raw = sessionStorage.getItem(key); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
+}
+function writeSessionCache(key, value) {
+  try { sessionStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* storage full or unavailable — skip caching silently */ }
+}
+
+async function fetchNearbyTrails(lat, lon, radiusMiles) {
+  const cacheKey = overpassCacheKey('trails', lat, lon, radiusMiles);
+  const cached = readSessionCache(cacheKey);
+  if (cached) return cached;
+
+  const radiusMeters = Math.round(radiusMiles * 1609.34);
+  const query = `[out:json][timeout:25];way["highway"~"^(path|footway|track)$"]["name"](around:${radiusMeters},${lat},${lon});out geom;`;
+  const url = 'https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(query);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Trail lookup failed — the OpenStreetMap server may be busy');
+  const data = await res.json();
+
+  const groups = {};
+  for (const el of data.elements) {
+    if (!el.geometry || el.geometry.length < 2 || !el.tags || !el.tags.name) continue;
+    const name = el.tags.name;
+    if (!groups[name]) groups[name] = { name, segments: [], totalMiles: 0, minDist: Infinity, anchor: null };
+    const coords = el.geometry.map(p => [p.lat, p.lon]);
+    groups[name].segments.push(coords);
+    for (let i = 0; i < coords.length - 1; i++) {
+      groups[name].totalMiles += haversineMiles(coords[i][0], coords[i][1], coords[i+1][0], coords[i+1][1]);
+    }
+    for (const [plat, plon] of coords) {
+      const d = haversineMiles(lat, lon, plat, plon);
+      if (d < groups[name].minDist) { groups[name].minDist = d; groups[name].anchor = [plat, plon]; }
+    }
+  }
+
+  const result = Object.values(groups).map(g => {
+    const lengthMiles = Math.round(g.totalMiles * 10) / 10;
+    return {
+      id: `${g.name}__${g.anchor[0].toFixed(3)}_${g.anchor[1].toFixed(3)}`,
+      name: g.name,
+      lat: g.anchor[0],
+      lon: g.anchor[1],
+      distFromUser: Math.round(g.minDist * 10) / 10,
+      distance: lengthMiles,
+      elevation: null,
+      elevationProfile: null,
+      difficulty: lengthMiles < 1.5 ? 'easy' : lengthMiles < 4 ? 'moderate' : 'hard',
+      segments: g.segments,
+    };
+  });
+  writeSessionCache(cacheKey, result);
+  return result;
+}
+
+async function fetchNearbyCampsites(lat, lon, radiusMiles) {
+  const cacheKey = overpassCacheKey('camps', lat, lon, radiusMiles);
+  const cached = readSessionCache(cacheKey);
+  if (cached) return cached;
+
+  const radiusMeters = Math.round(radiusMiles * 1609.34);
+  const query = `[out:json][timeout:25];node["tourism"="camp_site"](around:${radiusMeters},${lat},${lon});out;`;
+  const url = 'https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(query);
+  const res = await fetch(url);
+  if (!res.ok) return [];
+  const data = await res.json();
+  const result = (data.elements || []).filter(e => e.tags && e.tags.name).map(e => {
+    const amenities = [];
+    if (e.tags.tents === 'yes') amenities.push('Tent sites');
+    if (e.tags.caravans === 'yes') amenities.push('RV sites');
+    if (e.tags.shower === 'yes') amenities.push('Showers');
+    if (e.tags.drinking_water === 'yes') amenities.push('Drinking water');
+    if (e.tags.toilets === 'yes') amenities.push('Restrooms');
+    if (amenities.length === 0) amenities.push('Amenities not listed on OpenStreetMap');
+    return { name: e.tags.name, lat: e.lat, lon: e.lon, amenities };
+  });
+  writeSessionCache(cacheKey, result);
+  return result;
+}
+
+function nearestCampsite(trail) {
+  let best = null, bestDist = Infinity;
+  for (const c of allCampsites) {
+    const d = haversineMiles(trail.lat, trail.lon, c.lat, c.lon);
+    if (d < bestDist) { bestDist = d; best = c; }
+  }
+  return best && bestDist <= 20 ? best : null;
+}
+
+/* Real elevation gain + profile, sampled along the trail's actual mapped geometry (Open-Meteo, free/no-key). */
+async function fetchElevationGain(trail) {
+  try {
+    const allPoints = [];
+    for (const seg of trail.segments) for (const pt of seg) allPoints.push(pt);
+    if (allPoints.length < 2) return { gain: null, profile: null };
+
+    const maxSamples = 30;
+    const step = Math.max(1, Math.floor(allPoints.length / maxSamples));
+    const sampled = [];
+    for (let i = 0; i < allPoints.length; i += step) sampled.push(allPoints[i]);
+    const last = allPoints[allPoints.length - 1];
+    if (sampled[sampled.length - 1] !== last) sampled.push(last);
+    if (sampled.length < 2) return { gain: null, profile: null };
+
+    const lats = sampled.map(p => p[0]).join(',');
+    const lons = sampled.map(p => p[1]).join(',');
+    const url = `https://api.open-meteo.com/v1/elevation?latitude=${lats}&longitude=${lons}`;
+    const res = await fetch(url);
+    if (!res.ok) return { gain: null, profile: null };
+    const data = await res.json();
+    const elevationsMeters = data.elevation;
+    if (!elevationsMeters || elevationsMeters.length < 2) return { gain: null, profile: null };
+
+    let gainMeters = 0;
+    for (let i = 1; i < elevationsMeters.length; i++) {
+      const diff = elevationsMeters[i] - elevationsMeters[i - 1];
+      if (diff > 0) gainMeters += diff;
+    }
+    const profileFeet = elevationsMeters.map(m => Math.round(m * 3.28084));
+    return { gain: Math.round(gainMeters * 3.28084), profile: profileFeet };
+  } catch (e) {
+    return { gain: null, profile: null };
+  }
+}
+
+/* ---------------- Gear rules engine ---------------- */
+function buildGear(weather, trail) {
+  const clothing = [];
+  const footwear = [];
+  const extras = [];
+
+  if (weather.tempMin < 40) {
+    clothing.push({ item: "Insulated jacket", tag: "essential" });
+    clothing.push({ item: "Thermal base layer", tag: "essential" });
+    clothing.push({ item: "Warm hat & gloves", tag: "recommended" });
+  } else if (weather.tempMax > 82) {
+    clothing.push({ item: "Moisture-wicking shirt", tag: "essential" });
+    clothing.push({ item: "Sun hat", tag: "recommended" });
+    clothing.push({ item: "Lightweight shorts", tag: "recommended" });
+  } else {
+    clothing.push({ item: "Breathable layered shirt", tag: "essential" });
+    clothing.push({ item: "Light packable layer", tag: "recommended" });
+  }
+  if (weather.precipProb > 40) clothing.push({ item: "Rain shell", tag: "essential" });
+  if (weather.windMax > 15) clothing.push({ item: "Windbreaker", tag: "recommended" });
+
+  const hasElevationData = trail.elevation !== null && trail.elevation !== undefined;
+  if ((hasElevationData && trail.elevation > 300) || trail.distance > 5) {
+    footwear.push({ item: "Hiking boots (ankle support)", tag: "essential" });
+    footwear.push({ item: "Trekking poles", tag: "recommended" });
+  } else {
+    footwear.push({ item: "Trail runners / sneakers", tag: "essential" });
+  }
+  footwear.push({ item: "Moisture-wicking socks", tag: "recommended" });
+
+  extras.push({ item: "Water (2L minimum)", tag: "essential" });
+  extras.push({ item: "Offline trail map", tag: "essential" });
+  if (weather.precipProb > 40) extras.push({ item: "Pack rain cover", tag: "recommended" });
+  if (trail.distance > 4) extras.push({ item: "Trail snacks / electrolytes", tag: "recommended" });
+  if (hasElevationData && trail.elevation > 350) extras.push({ item: "First-aid kit", tag: "recommended" });
+
+  return [...clothing, ...footwear, ...extras];
+}
+
+/* ---------------- Rendering: weather + forecast ---------------- */
+function difficultyClass(d) { return d === 'easy' ? 'diff-easy' : d === 'hard' ? 'diff-hard' : 'diff-moderate'; }
+
+function renderWeather(weather, label) {
+  const card = document.getElementById('weatherCard');
+  card.classList.add('show');
+  const dayNames = weather.daily.map(d => new Date(d.date + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short' }));
+  card.innerHTML = `
+    <div class="weather-top">
+      <div class="weather-emoji">${weatherEmoji(weather.currentCode)}</div>
+      <div class="weather-stat"><span class="label">Location</span><span class="val">${label}</span></div>
+      <div class="weather-stat"><span class="label">Now</span><span class="val mono">${weather.currentTemp}°F</span></div>
+      <div class="weather-stat"><span class="label">Today's range</span><span class="val mono">${weather.tempMin}°–${weather.tempMax}°F</span></div>
+      <div class="weather-stat"><span class="label">Rain chance</span><span class="val mono">${weather.precipProb}%</span></div>
+      <div class="weather-stat"><span class="label">Wind</span><span class="val mono">${weather.windMax} mph</span></div>
+    </div>
+    <div class="forecast-strip">
+      ${weather.daily.map((d, i) => `
+        <div class="forecast-day">
+          <div class="d">${i === 0 ? 'Today' : dayNames[i]}</div>
+          <div class="e">${weatherEmoji(d.code)}</div>
+          <div class="t">${d.tempMin}°–${d.tempMax}°F</div>
+          <div class="p">${d.precipProb}% rain</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+/* ---------------- Radar ---------------- */
+async function initRadar(lat, lon) {
+  document.getElementById('radarSection').style.display = 'block';
+  if (!radarMap) {
+    radarMap = L.map('radarMapContainer').setView([lat, lon], 7);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors', maxZoom: 18
+    }).addTo(radarMap);
+  } else {
+    radarMap.setView([lat, lon], 7);
+  }
+  setTimeout(() => radarMap.invalidateSize(), 150);
+
+  if (radarPlaying) { clearInterval(radarInterval); radarPlaying = false; document.getElementById('radarPlay').textContent = '▶ Play'; }
+
+  try {
+    const res = await fetch('https://api.rainviewer.com/public/weather-maps.json');
+    const data = await res.json();
+    radarHost = data.host;
+    radarFrames = [...(data.radar.past || []), ...(data.radar.nowcast || [])];
+    if (radarFrames.length === 0) return;
+    radarIndex = (data.radar.past || []).length - 1;
+    document.getElementById('radarSlider').max = radarFrames.length - 1;
+    showRadarFrame(radarIndex);
+  } catch (e) {
+    // Radar is a bonus layer — fail quietly if RainViewer is unreachable.
+  }
+}
+
+function showRadarFrame(i) {
+  if (!radarFrames[i] || !radarMap) return;
+  radarIndex = i;
+  const frame = radarFrames[i];
+  const url = `${radarHost}${frame.path}/256/{z}/{x}/{y}/2/1_1.png`;
+  if (radarLayer) radarMap.removeLayer(radarLayer);
+  radarLayer = L.tileLayer(url, { opacity: 0.65 }).addTo(radarMap);
+  const d = new Date(frame.time * 1000);
+  document.getElementById('radarTimeLabel').textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  document.getElementById('radarSlider').value = i;
+}
+
+document.getElementById('radarSlider').addEventListener('input', (e) => showRadarFrame(parseInt(e.target.value, 10)));
+document.getElementById('radarPlay').addEventListener('click', () => {
+  radarPlaying = !radarPlaying;
+  document.getElementById('radarPlay').textContent = radarPlaying ? '⏸ Pause' : '▶ Play';
+  if (radarPlaying) {
+    radarInterval = setInterval(() => {
+      const next = radarIndex + 1 >= radarFrames.length ? 0 : radarIndex + 1;
+      showRadarFrame(next);
+    }, 600);
+  } else {
+    clearInterval(radarInterval);
+  }
+});
+
+/* ---------------- Filters + trail grid ---------------- */
+function getFilters() {
+  const activeDiffs = Array.from(document.querySelectorAll('.chip[data-diff].active')).map(c => c.dataset.diff);
+  const maxDist = parseInt(document.getElementById('distanceSlider').value, 10);
+  const favOnly = document.getElementById('favChip').classList.contains('active');
+  return { activeDiffs, maxDist, favOnly };
+}
+
+function renderTrails() {
+  const list = document.getElementById('trailList');
+  const { activeDiffs, maxDist, favOnly } = getFilters();
+
+  const filtered = allTrails
+    .filter(t => activeDiffs.includes(t.difficulty) && t.distFromUser <= maxDist && (!favOnly || isFavorite(t.id)))
+    .sort((a, b) => a.distFromUser - b.distFromUser);
+
+  list.innerHTML = '';
+  if (filtered.length === 0) {
+    list.innerHTML = '<div class="no-results">No trails match those filters within this range — try widening the distance, or OpenStreetMap may not have named trails mapped this close yet.</div>';
+    return;
+  }
+
+  filtered.forEach((t, i) => {
+    const card = document.createElement('div');
+    card.className = 'trail-card';
+    card.style.animationDelay = (i * 0.05) + 's';
+    card.tabIndex = 0;
+    const fav = isFavorite(t.id);
+    card.innerHTML = `
+      <div class="trail-img-wrap">
+        <button class="fav-btn ${fav ? 'active' : ''}" data-role="favbtn" type="button" aria-label="Save trail" aria-pressed="${fav}">${fav ? '★' : '☆'}</button>
+        <div class="placeholder-icon">🏞️</div>
+        <img alt="${t.name}" data-role="trailimg">
+        <div class="open-hint">🔍 Click to open trip planner</div>
+      </div>
+      <div class="trail-card-body">
+        <div class="trail-card-top">
+          <div><h3>${t.name}</h3></div>
+          <span class="diff-tag ${difficultyClass(t.difficulty)}">${t.difficulty}</span>
+        </div>
+        <div class="trail-stats">
+          <span><span class="n mono">${fmtDist(t.distance)}</span><span class="l">Trail length</span></span>
+          <span><span class="n mono" data-role="elev">${t.elevation !== null ? fmtElev(t.elevation) : '…'}</span><span class="l">Elev. gain</span></span>
+        </div>
+        <div class="trail-dist">${fmtDist(t.distFromUser)} from you</div>
+      </div>
+    `;
+    const imgEl = card.querySelector('[data-role="trailimg"]');
+    const favBtn = card.querySelector('[data-role="favbtn"]');
+    card.addEventListener('click', () => openTrailGui(t, card));
+    card.addEventListener('keypress', (e) => { if (e.key === 'Enter') openTrailGui(t, card); });
+    favBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleFavorite(t.id);
+      const nowFav = isFavorite(t.id);
+      favBtn.classList.toggle('active', nowFav);
+      favBtn.setAttribute('aria-pressed', String(nowFav));
+      favBtn.textContent = nowFav ? '★' : '☆';
+      if (getFilters().favOnly) renderTrails();
+    });
+
+    fetchImage(t.name).then(url => {
+      if (url) {
+        imgEl.src = url;
+        imgEl.onload = () => {
+          imgEl.classList.add('loaded');
+          const wrap = card.querySelector('.trail-img-wrap');
+          const ph = wrap.querySelector('.placeholder-icon');
+          if (ph) ph.style.display = 'none';
+          wrap.style.animation = 'none';
+        };
+      }
+    });
+
+    if (t.elevation === null) {
+      fetchElevationGain(t).then(({ gain, profile }) => {
+        t.elevation = gain;
+        t.elevationProfile = profile;
+        const elevSpan = card.querySelector('[data-role="elev"]');
+        if (elevSpan) elevSpan.textContent = gain !== null ? fmtElev(gain) : 'Not available';
+        if (currentTrail === t) refreshOpenGuiElevation(t);
+      });
+    }
+
+    list.appendChild(card);
+  });
+}
+
+/* ---------------- Elevation chart ---------------- */
+function renderElevationChart(trail) {
+  const wrap = document.getElementById('elevChartWrap');
+  if (trail.elevation === null && trail.elevationProfile === null) {
+    // still loading, or already tried and failed — check which
+  }
+  const profile = trail.elevationProfile;
+  if (!profile || profile.length < 2) {
+    wrap.innerHTML = `<div class="no-camp">${trail.elevation === undefined ? 'Looking up elevation…' : 'Elevation profile not available for this trail.'}</div>`;
+    return;
+  }
+  const w = 560, h = 60, pad = 4;
+  const min = Math.min(...profile), max = Math.max(...profile);
+  const range = (max - min) || 1;
+  const points = profile.map((v, i) => {
+    const x = pad + (i / (profile.length - 1)) * (w - 2 * pad);
+    const y = h - pad - ((v - min) / range) * (h - 2 * pad);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  wrap.innerHTML = `
+    <svg viewBox="0 0 ${w} ${h}" class="elev-chart" preserveAspectRatio="none" role="img" aria-label="Elevation profile chart">
+      <polyline points="${points}" fill="none" stroke="#C0392B" stroke-width="2"/>
+    </svg>
+    <div class="elev-chart-labels"><span>Low: ${fmtElev(min)}</span><span>High: ${fmtElev(max)}</span></div>
+  `;
+}
+
+/* ---------------- Click-through trail GUI ---------------- */
+function gearPhotoCard(g, index) {
+  const catalog = GEAR_CATALOG[g.item] || {};
+  const cardId = `gear-${index}`;
+  setTimeout(() => {
+    const el = document.getElementById(cardId);
+    if (!el || !catalog.searchTerm) return;
+    fetchImage(catalog.searchTerm).then(url => {
+      const img = el.querySelector('img');
+      if (url && img) {
+        img.src = url;
+        img.onload = () => {
+          img.classList.add('loaded');
+          const fallback = el.querySelector('.icon-fallback');
+          if (fallback) fallback.style.display = 'none';
+          el.querySelector('.gear-photo-wrap').style.animation = 'none';
+        };
+      }
+    });
+  }, 0);
+  return `
+    <div class="gear-photo-card" id="${cardId}">
+      <div class="gear-photo-wrap">
+        <div class="icon-fallback">${catalog.icon || '🎒'}</div>
+        <img alt="${g.item}">
+      </div>
+      <div class="gear-card-body">
+        <div class="gear-card-top">
+          <span class="gear-name">${g.item}</span>
+          <span class="gear-tag ${g.tag === 'essential' ? 'tag-essential' : 'tag-recommended'}">${g.tag}</span>
+        </div>
+        ${catalog.brand ? `<div class="gear-brand-line"><a href="${catalog.url}" target="_blank" rel="noopener">${catalog.brand} ${catalog.product}</a><br><span class="gear-price">${catalog.price}</span></div>` : ''}
+      </div>
+    </div>`;
+}
+
+function renderCampCard(trail) {
+  const camp = nearestCampsite(trail);
+  if (!camp) {
+    return `<div class="no-camp">No campsite found on OpenStreetMap within 20 miles of this trail.</div>`;
+  }
+  const cardId = 'camp-card';
+  setTimeout(() => {
+    const el = document.getElementById(cardId);
+    if (!el) return;
+    fetchImage(camp.name).then(url => {
+      const img = el.querySelector('img');
+      if (url && img) {
+        img.src = url;
+        img.onload = () => img.classList.add('loaded');
+      }
+    });
+  }, 0);
+  return `
+    <div class="camp-photo-card" id="${cardId}">
+      <div class="camp-photo-wrap"><img alt="${camp.name}"></div>
+      <div class="camp-card-body">
+        <h4>${camp.name}</h4>
+        <div class="camp-amenities">${camp.amenities.map(a => `<span class="amenity">${a}</span>`).join('')}</div>
+      </div>
+    </div>`;
+}
+
+function updateGuiFavButton(trail) {
+  const btn = document.getElementById('guiFavBtn');
+  const fav = isFavorite(trail.id);
+  btn.classList.toggle('active', fav);
+  btn.setAttribute('aria-pressed', String(fav));
+}
+
+function refreshOpenGuiElevation(trail) {
+  const elevText = trail.elevation !== null ? `${fmtElev(trail.elevation)} gain · ` : '';
+  document.getElementById('guiSub').textContent = `${fmtDist(trail.distance)} long · ${elevText}${fmtDist(trail.distFromUser)} from you · ${trail.difficulty}`;
+  renderElevationChart(trail);
+  const gear = buildGear(currentWeather, trail);
+  document.getElementById('gearGrid').innerHTML = gear.map((g, i) => gearPhotoCard(g, i)).join('');
+}
+
+/* Shareable link: encode the current search location + open trail into the URL */
+function updateShareUrl(trail) {
+  if (!searchLoc) return;
+  const params = new URLSearchParams();
+  params.set('loc', `${searchLoc.lat},${searchLoc.lon}`);
+  params.set('label', searchLoc.label);
+  if (trail) params.set('trail', trail.id);
+  history.replaceState(null, '', '?' + params.toString());
+}
+
+function openTrailGui(trail, originEl) {
+  lastFocusedElement = originEl || document.activeElement;
+  currentTrail = trail;
+  document.getElementById('guiTitle').textContent = trail.name;
+  refreshOpenGuiElevation(trail);
+  document.getElementById('directionsBtn').href = `https://www.google.com/maps/dir/?api=1&destination=${trail.lat},${trail.lon}`;
+  updateGuiFavButton(trail);
+
+  if (trail.elevation === null) {
+    fetchElevationGain(trail).then(({ gain, profile }) => {
+      trail.elevation = gain;
+      trail.elevationProfile = profile;
+      if (currentTrail === trail) refreshOpenGuiElevation(trail);
+    });
+  }
+
+  document.getElementById('campSection').innerHTML = renderCampCard(trail);
+
+  const overlay = document.getElementById('trailModalOverlay');
+  overlay.classList.add('show');
+  document.body.classList.add('modal-open');
+  document.querySelector('.gui-scroll').scrollTop = 0;
+  document.getElementById('guiClose').focus();
+  updateShareUrl(trail);
+
+  if (!leafletMap) {
+    leafletMap = L.map('guiMap').setView([trail.lat, trail.lon], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors', maxZoom: 18
+    }).addTo(leafletMap);
+    leafletMarker = L.marker([trail.lat, trail.lon]).addTo(leafletMap);
+  } else {
+    leafletMap.setView([trail.lat, trail.lon], 13);
+    leafletMarker.setLatLng([trail.lat, trail.lon]);
+  }
+  if (trailPathLayer) { leafletMap.removeLayer(trailPathLayer); trailPathLayer = null; }
+  setTimeout(() => leafletMap.invalidateSize(), 150);
+
+  if (trail.segments && trail.segments.length > 0) {
+    trailPathLayer = L.polyline(trail.segments, { color: '#C0392B', weight: 4, opacity: 0.85 }).addTo(leafletMap);
+    leafletMap.fitBounds(trailPathLayer.getBounds(), { padding: [24, 24] });
+  }
+}
+
+function closeTrailGui() {
+  document.getElementById('trailModalOverlay').classList.remove('show');
+  document.body.classList.remove('modal-open');
+  if (searchLoc) updateShareUrl(null);
+  if (lastFocusedElement && document.contains(lastFocusedElement)) lastFocusedElement.focus();
+}
+document.getElementById('guiClose').addEventListener('click', closeTrailGui);
+document.getElementById('guiFavBtn').addEventListener('click', () => {
+  if (!currentTrail) return;
+  toggleFavorite(currentTrail.id);
+  updateGuiFavButton(currentTrail);
+  renderTrails();
+});
+document.getElementById('shareBtn').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(window.location.href);
+    setStatus('Link copied to clipboard.', false, false);
+  } catch (e) {
+    setStatus('Could not copy the link — copy it from the address bar instead.', true, false);
+  }
+});
+document.getElementById('trailModalOverlay').addEventListener('click', (e) => { if (e.target.id === 'trailModalOverlay') closeTrailGui(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeTrailGui(); });
+
+/* ---------------- Filter controls ---------------- */
+document.querySelectorAll('.chip[data-diff]').forEach(chip => {
+  chip.addEventListener('click', () => {
+    chip.classList.toggle('active');
+    chip.setAttribute('aria-pressed', String(chip.classList.contains('active')));
+    renderTrails();
+  });
+});
+document.getElementById('favChip').addEventListener('click', (e) => {
+  e.currentTarget.classList.toggle('active');
+  e.currentTarget.setAttribute('aria-pressed', String(e.currentTarget.classList.contains('active')));
+  renderTrails();
+});
+document.getElementById('distanceSlider').addEventListener('input', (e) => {
+  document.getElementById('distanceVal').textContent = fmtDist(parseInt(e.target.value, 10));
+  renderTrails();
+});
+
+/* ---------------- Unit + dark mode toggles ---------------- */
+function applyUnitButtonLabel() {
+  document.getElementById('unitToggle').textContent = units === 'imperial' ? 'mi' : 'km';
+  document.getElementById('unitToggle').setAttribute('aria-pressed', String(units === 'metric'));
+}
+document.getElementById('unitToggle').addEventListener('click', () => {
+  units = units === 'imperial' ? 'metric' : 'imperial';
+  localStorage.setItem(UNITS_KEY, units);
+  applyUnitButtonLabel();
+  document.getElementById('distanceVal').textContent = fmtDist(parseInt(document.getElementById('distanceSlider').value, 10));
+  if (allTrails.length) renderTrails();
+  if (currentTrail) refreshOpenGuiElevation(currentTrail);
+});
+applyUnitButtonLabel();
+
+function applyDarkMode(on) {
+  document.body.classList.toggle('dark-mode', on);
+  document.getElementById('darkToggle').setAttribute('aria-pressed', String(on));
+  document.getElementById('darkToggle').textContent = on ? '☀️' : '🌙';
+}
+document.getElementById('darkToggle').addEventListener('click', () => {
+  const nowDark = !document.body.classList.contains('dark-mode');
+  localStorage.setItem(DARK_KEY, nowDark ? '1' : '0');
+  applyDarkMode(nowDark);
+});
+applyDarkMode(localStorage.getItem(DARK_KEY) === '1');
+
+/* ---------------- Search flow ---------------- */
+async function runSearchCore(lat, lon, label, queryToRemember) {
+  document.getElementById('trailSection').style.display = 'none';
+  document.getElementById('filterBar').classList.remove('show');
+  document.getElementById('weatherCard').classList.remove('show');
+  searchLoc = { lat, lon, label };
+
+  try {
+    setStatus('Pulling live weather…', false, true);
+    const weather = await getWeather(lat, lon);
+    currentWeather = weather;
+    renderWeather(weather, label);
+    initRadar(lat, lon);
+
+    setStatus('Searching OpenStreetMap for trails and campsites nearby…', false, true);
+    const [trails, campsites] = await Promise.all([
+      fetchNearbyTrails(lat, lon, FETCH_RADIUS_CAP_MILES),
+      fetchNearbyCampsites(lat, lon, FETCH_RADIUS_CAP_MILES),
+    ]);
+    allTrails = trails;
+    allCampsites = campsites;
+
+    document.getElementById('trailSection').style.display = 'block';
+    document.getElementById('filterBar').classList.add('show');
+    document.getElementById('distanceSlider').max = FETCH_RADIUS_CAP_MILES;
+    document.getElementById('distanceSlider').value = 20;
+    document.getElementById('distanceVal').textContent = fmtDist(20);
+    document.querySelectorAll('.chip[data-diff]').forEach(c => { c.classList.add('active'); c.setAttribute('aria-pressed', 'true'); });
+    document.getElementById('favChip').classList.remove('active');
+    renderTrails();
+    setStatus(`Found ${trails.length} named trail${trails.length === 1 ? '' : 's'} within ${fmtDist(FETCH_RADIUS_CAP_MILES)} of ${label}.`, false, false);
+    if (queryToRemember) localStorage.setItem(LAST_QUERY_KEY, queryToRemember);
+    updateShareUrl(null);
+
+    if (pendingTrailId) {
+      const match = allTrails.find(t => t.id === pendingTrailId);
+      pendingTrailId = null;
+      if (match) {
+        const idx = allTrails.filter(t => getFilters().activeDiffs.includes(t.difficulty)).findIndex(t => t.id === match.id);
+        setTimeout(() => openTrailGui(match, document.getElementById('trailList')), 200);
+      }
+    }
+  } catch (err) {
+    setStatus(`Couldn't complete that search: ${err.message}`, true, false, () => runSearchCore(lat, lon, label, queryToRemember));
+  }
+}
+
+async function runSearch() {
+  const query = document.getElementById('locationInput').value.trim();
+  if (!query) { setStatus('Enter a city or zip code to get started.', true); return; }
+  setStatus('Looking up location…', false, true);
+  try {
+    const loc = await geocode(query);
+    await runSearchCore(loc.lat, loc.lon, loc.label, query);
+  } catch (err) {
+    setStatus(`Couldn't complete that search: ${err.message}`, true, false, runSearch);
+  }
+}
+
+function runSearchFromCoords() {
+  if (!navigator.geolocation) { setStatus('Location access is not supported by this browser.', true); return; }
+  setStatus('Getting your location…', false, true);
+  navigator.geolocation.getCurrentPosition(async (pos) => {
+    const { latitude, longitude } = pos.coords;
+    setStatus('Looking up your location…', false, true);
+    const label = await reverseGeocode(latitude, longitude);
+    document.getElementById('locationInput').value = label;
+    await runSearchCore(latitude, longitude, label, label);
+  }, () => {
+    setStatus('Could not get your location — check your browser/location permissions.', true, false, runSearchFromCoords);
+  }, { timeout: 8000 });
+}
+
+document.getElementById('searchBtn').addEventListener('click', runSearch);
+document.getElementById('locBtn').addEventListener('click', runSearchFromCoords);
+document.getElementById('locationInput').addEventListener('keypress', (e) => { if (e.key === 'Enter') runSearch(); });
+
+/* Restore from a shared URL (?loc=lat,lon&label=..&trail=id) first, else fall back to the last remembered search */
+window.addEventListener('DOMContentLoaded', () => {
+  const params = new URLSearchParams(window.location.search);
+  const locParam = params.get('loc');
+  const labelParam = params.get('label');
+  const trailParam = params.get('trail');
+
+  if (locParam) {
+    const [lat, lon] = locParam.split(',').map(Number);
+    if (!isNaN(lat) && !isNaN(lon)) {
+      document.getElementById('locationInput').value = labelParam || '';
+      pendingTrailId = trailParam || null;
+      runSearchCore(lat, lon, labelParam || 'Shared location', null);
+      return;
+    }
+  }
+  const last = localStorage.getItem(LAST_QUERY_KEY);
+  if (last) {
+    document.getElementById('locationInput').value = last;
+    runSearch();
+  }
+});
+
+/* ---------------- Hero photo ---------------- */
+fetchImage('scenic hiking trail mountain forest').then(url => {
+  if (url) document.getElementById('heroEl').style.backgroundImage = `url('${url}')`;
+});
+
+/* ---------------- Offline detection ---------------- */
+function updateOfflineBanner() {
+  document.getElementById('offlineBanner').classList.toggle('show', !navigator.onLine);
+}
+window.addEventListener('online', updateOfflineBanner);
+window.addEventListener('offline', updateOfflineBanner);
+updateOfflineBanner();
+
+/* ---------------- Service worker registration ---------------- */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch((err) => console.warn('Service worker registration failed:', err));
+  });
+}
+</script>
+</body>
+</html>
