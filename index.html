@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hike.io — Ohio Trail Planner</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1B3A2B">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Hike.io">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@400;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  :root {
+    --pine: #1B3A2B; --pine-light: #24503A; --moss: #4A6B4C;
+    --tan: #ECE5D2; --tan-deep: #DDD2B4; --bark: #5C4A3A;
+    --blaze-blue: #2F6DB0; --blaze-orange: #C1652C; --blaze-red: #C0392B; --ink: #22281F; --paper: #F7F4EA;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font-family: 'Inter', sans-serif; line-height: 1.5; }
+  h1, h2, h3, h4 { font-family: 'Zilla Slab', serif; margin: 0; }
+  .mono { font-family: 'IBM Plex Mono', monospace; }
+
+  @keyframes fadeInUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes pulseGlow { 0%,100% { opacity: 0.55; } 50% { opacity: 1; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes scaleIn { from { opacity: 0; transform: scale(0.94) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+  @keyframes shimmer { 0% { background-position: -300px 0; } 100% { background-position: 300px 0; } }
+
+  .blaze { display: inline-block; width: 10px; height: 22px; border-radius: 2px; flex-shrink: 0; animation: pulseGlow 3s ease-in-out infinite; }
+  .blaze.blue { background: var(--blaze-blue); }
+  .blaze.orange { background: var(--blaze-orange); }
+  .blaze.green { background: var(--moss); }
+  .blaze.red { background: var(--blaze-red); }
+
+  .hero { background: var(--pine); color: var(--paper); padding: 4rem 1.5rem 3rem; position: relative; overflow: hidden; }
+  .hero::before {
+    content: ""; position: absolute; inset: 0; opacity: 0.18;
+    background-image:
+      repeating-radial-gradient(circle at 15% 30%, transparent 0, transparent 18px, rgba(236,229,210,0.5) 19px, transparent 20px, transparent 40px),
+      repeating-radial-gradient(circle at 85% 75%, transparent 0, transparent 24px, rgba(236,229,210,0.4) 25px, transparent 26px, transparent 50px);
+    pointer-events: none;
+  }
+  .hero-inner { max-width: 780px; margin: 0 auto; position: relative; z-index: 1; animation: fadeInUp 0.7s ease both; }
+  .eyebrow { display: flex; align-items: center; gap: 0.6rem; text-transform: uppercase; letter-spacing: 0.14em; font-size: 0.72rem; color: #C9D9C4; margin-bottom: 1rem; }
+  .hero h1 { font-size: clamp(2.1rem, 5vw, 3.2rem); font-weight: 700; line-height: 1.05; margin-bottom: 0.9rem; }
+  .hero p.sub { font-size: 1.05rem; color: #D8E0D2; max-width: 46ch; margin-bottom: 2rem; }
+
+  .search-row { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+  .search-row input { flex: 1; min-width: 220px; padding: 0.85rem 1rem; border-radius: 6px; border: 2px solid transparent; font-family: 'Inter', sans-serif; font-size: 1rem; background: var(--paper); color: var(--ink); transition: box-shadow 0.15s ease; }
+  .search-row input:focus { outline: none; border-color: var(--blaze-orange); box-shadow: 0 0 0 4px rgba(193,101,44,0.18); }
+  .search-row button { padding: 0.85rem 1.2rem; background: var(--blaze-orange); color: white; border: none; border-radius: 6px; font-weight: 600; font-size: 1rem; cursor: pointer; transition: background 0.15s ease, transform 0.1s ease; white-space: nowrap; }
+  .search-row button:hover { background: #A5541F; transform: translateY(-1px); }
+  .search-row button:active { transform: translateY(0); }
+  #locBtn { background: rgba(255,255,255,0.14); }
+  #locBtn:hover { background: rgba(255,255,255,0.25); }
+  .search-row button:focus-visible, .search-row input:focus-visible { outline: 3px solid #C9D9C4; outline-offset: 2px; }
+  .hint { font-size: 0.85rem; color: #AFC2A8; margin-top: 0.6rem; }
+
+  main { max-width: 1120px; margin: 0 auto; padding: 0 1.5rem; }
+
+  .status-line { display: flex; align-items: center; gap: 0.7rem; margin: 2.2rem 0 1rem; font-size: 0.95rem; color: var(--bark); animation: fadeIn 0.4s ease; }
+  .status-line.error { color: #8C2F1B; }
+  .spinner { width: 14px; height: 14px; border: 2px solid var(--tan-deep); border-top-color: var(--blaze-orange); border-radius: 50%; animation: spin 0.7s linear infinite; }
+
+  #weatherCard { display: none; background: white; border: 1px solid var(--tan-deep); border-radius: 10px; padding: 1.4rem 1.6rem; margin-bottom: 1.5rem; flex-direction: column; gap: 1.1rem; animation: fadeInUp 0.4s ease both; }
+  #weatherCard.show { display: flex; }
+  .weather-top { display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: center; }
+  .weather-stat { display: flex; flex-direction: column; gap: 0.15rem; }
+  .weather-stat .label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--moss); }
+  .weather-stat .val { font-size: 1.3rem; font-weight: 600; }
+  .weather-emoji { font-size: 2.2rem; line-height: 1; }
+
+  .forecast-strip { display: flex; gap: 0.7rem; border-top: 1px solid var(--tan); padding-top: 1rem; }
+  .forecast-day { flex: 1; text-align: center; background: var(--paper); border-radius: 8px; padding: 0.6rem 0.4rem; }
+  .forecast-day .d { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--bark); font-weight: 600; }
+  .forecast-day .e { font-size: 1.4rem; margin: 0.2rem 0; }
+  .forecast-day .t { font-size: 0.8rem; font-weight: 600; }
+  .forecast-day .p { font-size: 0.7rem; color: var(--blaze-blue); }
+
+  section h2 { font-size: 1.4rem; color: var(--pine); display: flex; align-items: center; gap: 0.6rem; margin-bottom: 1rem; }
+
+  /* ---------- Radar section ---------- */
+  #radarSection { display: none; margin-bottom: 2rem; animation: fadeInUp 0.4s ease both; }
+  #radarMapContainer { height: 320px; border-radius: 10px; overflow: hidden; border: 1px solid var(--tan-deep); }
+  .radar-controls { display: flex; align-items: center; gap: 0.8rem; margin-top: 0.7rem; background: white; border: 1px solid var(--tan-deep); border-radius: 8px; padding: 0.6rem 0.9rem; }
+  .radar-controls button { background: var(--pine); color: white; border: none; border-radius: 6px; padding: 0.4rem 0.8rem; font-size: 0.85rem; cursor: pointer; transition: background 0.15s ease; }
+  .radar-controls button:hover { background: var(--pine-light); }
+  #radarSlider { flex: 1; accent-color: var(--blaze-blue); }
+  #radarTimeLabel { font-size: 0.8rem; color: var(--bark); min-width: 70px; text-align: right; }
+
+  #filterBar { display: none; flex-wrap: wrap; gap: 1.5rem; align-items: center; background: white; border: 1px solid var(--tan-deep); border-radius: 10px; padding: 1rem 1.3rem; margin-bottom: 1.3rem; }
+  #filterBar.show { display: flex; animation: fadeInUp 0.4s ease both; }
+  .filter-group { display: flex; align-items: center; gap: 0.6rem; }
+  .filter-label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--bark); font-weight: 600; }
+  .chip { padding: 0.32rem 0.75rem; border-radius: 20px; border: 1.5px solid var(--tan-deep); background: var(--paper); font-size: 0.82rem; cursor: pointer; transition: all 0.15s ease; font-family: 'Inter', sans-serif; }
+  .chip.active { background: var(--moss); border-color: var(--moss); color: white; }
+  .chip.fav-chip.active { background: var(--blaze-orange); border-color: var(--blaze-orange); }
+  .chip:hover { border-color: var(--moss); }
+  #distanceSlider { accent-color: var(--blaze-orange); width: 140px; }
+  .distance-val { font-size: 0.85rem; font-weight: 600; color: var(--pine); min-width: 60px; }
+
+  #trailList { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; margin-bottom: 3rem; }
+  .trail-card { background: white; border: 1px solid var(--tan-deep); border-radius: 10px; overflow: hidden; cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease; animation: fadeInUp 0.5s ease both; }
+  .trail-card:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(27,58,43,0.14); border-color: var(--moss); }
+
+  .trail-img-wrap { position: relative; height: 150px; background: linear-gradient(90deg, var(--tan-deep) 25%, var(--tan) 37%, var(--tan-deep) 63%); background-size: 400px 100%; animation: shimmer 1.4s ease-in-out infinite; overflow: hidden; }
+  .trail-img-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.35s ease, opacity 0.3s ease; opacity: 0; }
+  .trail-img-wrap img.loaded { opacity: 1; }
+  .trail-card:hover .trail-img-wrap img.loaded { transform: scale(1.06); }
+  .trail-img-wrap .open-hint {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: linear-gradient(transparent, rgba(0,0,0,0.55));
+    color: white; font-size: 0.72rem; padding: 0.9rem 0.7rem 0.4rem;
+    display: flex; align-items: center; gap: 0.3rem; opacity: 0; transition: opacity 0.2s ease;
+  }
+  .trail-card:hover .open-hint { opacity: 1; }
+  .placeholder-icon { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 2.2rem; opacity: 0.5; }
+  .fav-btn {
+    position: absolute; top: 0.5rem; right: 0.5rem; z-index: 2;
+    width: 32px; height: 32px; border-radius: 50%; border: none;
+    background: rgba(255,255,255,0.85); font-size: 1rem; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; transition: transform 0.12s ease, background 0.12s ease;
+  }
+  .fav-btn:hover { transform: scale(1.1); }
+  .fav-btn.active { background: var(--blaze-orange); }
+
+  .trail-card-body { padding: 1.1rem 1.2rem; }
+  .trail-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.6rem; }
+  .trail-card h3 { font-size: 1.05rem; color: var(--ink); margin-bottom: 0.15rem; }
+  .trail-park { font-size: 0.8rem; color: var(--bark); margin-bottom: 0.5rem; }
+  .diff-tag { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; padding: 0.2rem 0.5rem; border-radius: 4px; white-space: nowrap; }
+  .diff-easy { background: #DCEBD8; color: #2F5C31; }
+  .diff-moderate { background: #DCE7F2; color: var(--blaze-blue); }
+  .diff-hard { background: #F1DAD2; color: #8C2F1B; }
+
+  .trail-stats { display: flex; gap: 1.1rem; margin-top: 0.6rem; font-size: 0.85rem; }
+  .trail-stats span { display: flex; flex-direction: column; }
+  .trail-stats .n { font-weight: 600; }
+  .trail-stats .l { font-size: 0.66rem; color: var(--bark); text-transform: uppercase; letter-spacing: 0.05em; }
+  .trail-dist { margin-top: 0.6rem; font-size: 0.8rem; color: var(--moss); font-weight: 600; }
+  .no-results { grid-column: 1/-1; text-align: center; padding: 2rem; color: var(--bark); font-style: italic; }
+
+  footer { text-align: center; font-size: 0.78rem; color: var(--bark); padding: 2rem 1rem 3rem; }
+
+  /* ---------- Click-through trail GUI (modal) ---------- */
+  .trail-modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(20,35,26,0.6);
+    z-index: 200; align-items: center; justify-content: center; padding: 1.2rem;
+  }
+  .trail-modal-overlay.show { display: flex; animation: fadeIn 0.2s ease; }
+  body.modal-open { overflow: hidden; }
+
+  .trail-gui {
+    background: var(--paper); border-radius: 14px; width: 100%; max-width: 640px;
+    height: min(88vh, 780px); display: flex; flex-direction: column; overflow: hidden;
+    box-shadow: 0 30px 60px rgba(0,0,0,0.35);
+    animation: scaleIn 0.28s cubic-bezier(0.2,0.9,0.3,1) both;
+  }
+  .gui-topbar {
+    background: var(--pine); color: var(--paper); padding: 1rem 1.2rem;
+    display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; gap: 0.6rem;
+  }
+  .gui-topbar-title h3 { font-size: 1.15rem; }
+  .gui-topbar-title .sub { font-size: 0.8rem; color: #C9D9C4; margin-top: 0.15rem; }
+  .gui-topbar-actions { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
+  .directions-btn {
+    background: rgba(255,255,255,0.14); color: white; border: none; border-radius: 8px;
+    padding: 0.45rem 0.7rem; font-size: 0.78rem; cursor: pointer; text-decoration: none;
+    display: flex; align-items: center; gap: 0.3rem; transition: background 0.15s ease; white-space: nowrap;
+  }
+  .directions-btn:hover { background: rgba(255,255,255,0.26); }
+  .gui-fav-btn { background: rgba(255,255,255,0.14); border: none; color: white; width: 34px; height: 34px; border-radius: 8px; cursor: pointer; font-size: 1rem; transition: background 0.15s ease; flex-shrink: 0; }
+  .gui-fav-btn.active { background: var(--blaze-orange); }
+  .gui-close { background: rgba(255,255,255,0.12); border: none; color: white; width: 34px; height: 34px; border-radius: 8px; cursor: pointer; font-size: 1rem; transition: background 0.15s ease; flex-shrink: 0; }
+  .gui-close:hover { background: rgba(255,255,255,0.25); }
+
+  .gui-map { height: 240px; flex-shrink: 0; position: relative; }
+  .gui-scroll { flex: 1; overflow-y: auto; padding: 1.4rem 1.4rem 2rem; }
+  .gui-scroll::-webkit-scrollbar { width: 8px; }
+  .gui-scroll::-webkit-scrollbar-thumb { background: var(--tan-deep); border-radius: 4px; }
+
+  .gui-section-label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--moss); font-weight: 700; margin: 1.4rem 0 0.7rem; display: flex; align-items: center; gap: 0.5rem; }
+  .gui-section-label:first-child { margin-top: 0; }
+
+  .gear-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.9rem; }
+  .gear-photo-card {
+    background: white; border: 1px solid var(--tan-deep); border-radius: 10px; overflow: hidden;
+    animation: fadeInUp 0.4s ease both; transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .gear-photo-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(27,58,43,0.12); }
+  .gear-photo-wrap { height: 100px; background: linear-gradient(90deg, var(--tan-deep) 25%, var(--tan) 37%, var(--tan-deep) 63%); background-size: 400px 100%; animation: shimmer 1.4s ease-in-out infinite; position: relative; overflow: hidden; }
+  .gear-photo-wrap img { width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 0.3s ease; }
+  .gear-photo-wrap img.loaded { opacity: 1; }
+  .gear-photo-wrap .icon-fallback { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; opacity: 0.45; }
+  .gear-card-body { padding: 0.6rem 0.7rem 0.75rem; }
+  .gear-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.3rem; }
+  .gear-name { font-size: 0.82rem; font-weight: 600; line-height: 1.25; }
+  .gear-tag { font-size: 0.56rem; text-transform: uppercase; font-weight: 700; letter-spacing: 0.04em; padding: 0.1rem 0.35rem; border-radius: 3px; white-space: nowrap; flex-shrink: 0; }
+  .tag-essential { background: var(--blaze-orange); color: white; }
+  .tag-recommended { background: var(--tan-deep); color: var(--bark); }
+  .gear-brand-line { font-size: 0.74rem; color: var(--bark); margin-top: 0.3rem; }
+  .gear-brand-line a { color: var(--blaze-blue); text-decoration: none; }
+  .gear-brand-line a:hover { text-decoration: underline; }
+  .gear-price { color: var(--pine); font-weight: 600; }
+
+  .camp-photo-card { background: white; border: 1px solid var(--tan-deep); border-radius: 10px; overflow: hidden; animation: fadeInUp 0.4s ease both; }
+  .camp-photo-wrap { height: 150px; background: linear-gradient(90deg, var(--tan-deep) 25%, var(--tan) 37%, var(--tan-deep) 63%); background-size: 400px 100%; animation: shimmer 1.4s ease-in-out infinite; position: relative; overflow: hidden; }
+  .camp-photo-wrap img { width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 0.3s ease; }
+  .camp-photo-wrap img.loaded { opacity: 1; }
+  .camp-card-body { padding: 0.9rem 1rem 1.1rem; }
+  .camp-card-body h4 { font-size: 1rem; color: var(--pine); margin-bottom: 0.5rem; }
+  .camp-amenities { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+  .amenity { font-size: 0.72rem; background: var(--tan); border: 1px solid var(--tan-deep); padding: 0.15rem 0.5rem; border-radius: 4px; color: var(--bark); }
+  .no-camp { font-size: 0.88rem; color: var(--bark); font-style: italic; padding: 0.5rem 0; }
+  .path-note { font-size: 0.72rem; color: var(--bark); padding: 0.4rem 0 0; font-style: italic; }
+
+  #offlineBanner {
+    display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 300;
+    background: var(--blaze-orange); color: white; text-align: center;
+    font-size: 0.82rem; padding: 0.5rem; animation: fadeIn 0.2s ease;
+  }
+  #offlineBanner.show { display: block; }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    * { animation-duration: 0.001s !important; transition-duration: 0.001s !important; }
+  }
+</style>
+</head>
+<body>
+
+<div id="offlineBanner">📡 You're offline — showing previously loaded trails, maps, and photos. Weather won't update until you're back online.</div>
+
+<div class="hero">
+  <div class="hero-inner">
+    <div class="eyebrow"><span class="blaze blue"></span> Hike.io</div>
+    <h1>Find a trail. Know what to pack. Camp nearby.</h1>
+    <p class="sub">Enter a city or zip code and we'll pull today's real weather, match you with nearby Ohio trails, and build a gear list for the conditions.</p>
+    <div class="search-row">
+      <input id="locationInput" type="text" placeholder="e.g. Columbus, OH or 43065" aria-label="City or zip code">
+      <button id="locBtn" type="button" title="Use my current location">📍</button>
+      <button id="searchBtn" type="button">Find trails</button>
+    </div>
+    <div class="hint">Weather from Open-Meteo, live — not simulated.</div>
+  </div>
+</div>
+
+<main>
+  <div class="status-line" id="statusLine" style="display:none;"></div>
+  <div id="weatherCard"></div>
+
+  <section id="radarSection">
+    <h2><span class="blaze blue"></span> Precipitation radar</h2>
+    <div id="radarMapContainer"></div>
+    <div class="radar-controls">
+      <button id="radarPlay" type="button">▶ Play</button>
+      <input type="range" id="radarSlider" min="0" max="0" value="0">
+      <span id="radarTimeLabel" class="mono"></span>
+    </div>
+  </section>
+
+  <div id="filterBar">
+    <div class="filter-group">
+      <span class="filter-label">Difficulty</span>
+      <button class="chip active" data-diff="easy" type="button">Easy</button>
+      <button class="chip active" data-diff="moderate" type="button">Moderate</button>
+      <button class="chip active" data-diff="hard" type="button">Hard</button>
+    </div>
+    <div class="filter-group">
+      <span class="filter-label">Within</span>
+      <input type="range" id="distanceSlider" min="1" max="150" value="150">
+      <span class="distance-val" id="distanceVal">150 mi</span>
+    </div>
+    <div class="filter-group">
+      <button class="chip fav-chip" id="favChip" type="button">★ Favorites only</button>
+    </div>
+  </div>
+
+  <section id="trailSection" style="display:none;">
+    <h2><span class="blaze green"></span> Trails near you</h2>
+    <div id="trailList"></div>
+  </section>
+</main>
+
+<footer>Trail &amp; campground data curated for Ohio. Photos via Wikimedia Commons (CC-licensed). Weather via Open-Meteo. Radar via RainViewer. Trail paths via OpenStreetMap/Overpass. Gear brands &amp; prices shown for illustration — check retailer sites for current pricing.</footer>
+
+<!-- Click-through trail GUI -->
+<div class="trail-modal-overlay" id="trailModalOverlay">
+  <div class="trail-gui" id="trailGui">
+    <div class="gui-topbar">
+      <div class="gui-topbar-title">
+        <h3 id="guiTitle"></h3>
+        <div class="sub" id="guiSub"></div>
+      </div>
+      <div class="gui-topbar-actions">
+        <button class="gui-fav-btn" id="guiFavBtn" type="button" title="Save trail">★</button>
+        <a class="directions-btn" id="directionsBtn" href="#" target="_blank" rel="noopener">🧭 Directions</a>
+        <button class="gui-close" id="guiClose" type="button" aria-label="Close">✕</button>
+      </div>
+    </div>
+    <div class="gui-map" id="guiMap"></div>
+    <div class="gui-scroll">
+      <div class="gui-section-label">🎒 Recommended gear</div>
+      <div class="gear-grid" id="gearGrid"></div>
+      <div class="gui-section-label">⛺ Nearby camping</div>
+      <div id="campSection"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------------- Curated Ohio trail dataset ---------------- */
+const TRAILS = [
+  { name: "Old Man's Cave Trail", park: "Hocking Hills State Park", lat: 39.4372, lon: -82.5321, distance: 3.5, elevation: 300, difficulty: "moderate", campground: "hocking" },
+  { name: "Ash Cave Loop", park: "Hocking Hills State Park", lat: 39.4028, lon: -82.5661, distance: 0.5, elevation: 60, difficulty: "easy", campground: "hocking" },
+  { name: "Cedar Falls Trail", park: "Hocking Hills State Park", lat: 39.4212, lon: -82.5477, distance: 2.2, elevation: 220, difficulty: "moderate", campground: "hocking" },
+  { name: "Rock House Trail", park: "Hocking Hills State Park", lat: 39.4519, lon: -82.5988, distance: 1.0, elevation: 150, difficulty: "easy", campground: "hocking" },
+  { name: "Conkles Hollow Gorge Rim", park: "Hocking Hills State Park", lat: 39.4711, lon: -82.5647, distance: 2.5, elevation: 400, difficulty: "hard", campground: "hocking" },
+  { name: "Rockbridge Natural Bridge Trail", park: "Rockbridge State Nature Preserve", lat: 39.4806, lon: -82.5783, distance: 1.5, elevation: 180, difficulty: "moderate", campground: "none" },
+  { name: "Written Rock Trail", park: "Clear Creek Metro Park", lat: 39.5800, lon: -82.5100, distance: 3.0, elevation: 260, difficulty: "moderate", campground: "none" },
+  { name: "Christmas Rocks Loop", park: "Christmas Rocks State Nature Preserve", lat: 39.6700, lon: -82.6500, distance: 2.7, elevation: 240, difficulty: "hard", campground: "none" },
+  { name: "Ledges Trail", park: "Cuyahoga Valley National Park", lat: 41.2334, lon: -81.5486, distance: 2.2, elevation: 250, difficulty: "moderate", campground: "none" },
+  { name: "Brandywine Falls Loop", park: "Cuyahoga Valley National Park", lat: 41.2612, lon: -81.5334, distance: 1.5, elevation: 180, difficulty: "easy", campground: "none" },
+  { name: "Overlook Trail", park: "Highbanks Metro Park", lat: 40.1791, lon: -83.0140, distance: 2.8, elevation: 150, difficulty: "moderate", campground: "none" },
+  { name: "Gorge Overlook Trail", park: "Mohican State Park", lat: 40.6273, lon: -82.3013, distance: 4.0, elevation: 350, difficulty: "hard", campground: "mohican" },
+  { name: "Clifton Gorge Trail", park: "John Bryan State Park", lat: 39.7942, lon: -83.8938, distance: 3.0, elevation: 280, difficulty: "moderate", campground: "bryan" },
+  { name: "Hueston Woods Lake Trail", park: "Hueston Woods State Park", lat: 39.5497, lon: -84.7275, distance: 4.5, elevation: 120, difficulty: "moderate", campground: "hueston" },
+  { name: "Mount Airy Forest Loop", park: "Mount Airy Forest", lat: 39.1934, lon: -84.5744, distance: 2.0, elevation: 200, difficulty: "easy", campground: "none" },
+  { name: "Blackhand Gorge Bikeway & Trail", park: "Blackhand Gorge State Nature Preserve", lat: 40.0567, lon: -82.3843, distance: 5.5, elevation: 190, difficulty: "moderate", campground: "none" },
+  { name: "Dundee Falls Trail", park: "Beach City Wildlife Area", lat: 40.6423, lon: -81.4326, distance: 1.8, elevation: 220, difficulty: "moderate", campground: "none" },
+  { name: "Sharon Woods Loop", park: "Sharon Woods Metro Park", lat: 40.1223, lon: -82.9187, distance: 3.3, elevation: 90, difficulty: "easy", campground: "none" },
+];
+
+const CAMPGROUNDS = {
+  hocking: { name: "Hocking Hills State Park Campground", searchTerm: "Hocking Hills State Park campground", amenities: ["Tent sites", "RV sites", "Showers", "Camp store"] },
+  mohican: { name: "Mohican State Park Campground", searchTerm: "Mohican State Park campground", amenities: ["Tent sites", "RV sites", "Showers"] },
+  bryan: { name: "John Bryan State Park Campground", searchTerm: "John Bryan State Park", amenities: ["Tent sites", "Pit latrines", "Walk-in sites"] },
+  hueston: { name: "Hueston Woods State Park Campground", searchTerm: "Hueston Woods State Park", amenities: ["Tent sites", "RV sites", "Showers", "Camp store", "Lake access"] },
+};
+
+const GEAR_CATALOG = {
+  "Insulated jacket": { brand: "Patagonia", product: "Down Sweater Hoody", price: "~$279", icon: "🧥", url: "https://www.patagonia.com", searchTerm: "down jacket outdoor" },
+  "Thermal base layer": { brand: "Patagonia", product: "Capilene Thermal Weight", price: "~$79", icon: "👕", url: "https://www.patagonia.com", searchTerm: "thermal base layer clothing" },
+  "Warm hat & gloves": { brand: "The North Face", product: "Norm Beanie + Etip Gloves", price: "~$60", icon: "🧤", url: "https://www.thenorthface.com", searchTerm: "winter beanie gloves" },
+  "Moisture-wicking shirt": { brand: "The North Face", product: "Wander Short-Sleeve Tee", price: "~$45", icon: "👕", url: "https://www.thenorthface.com", searchTerm: "athletic t shirt hiking" },
+  "Sun hat": { brand: "Outdoor Research", product: "Sun Runner Cap", price: "~$35", icon: "🧢", url: "https://www.outdoorresearch.com", searchTerm: "hiking sun hat" },
+  "Lightweight shorts": { brand: "REI Co-op", product: "Sahara Shorts", price: "~$45", icon: "🩳", url: "https://www.rei.com", searchTerm: "hiking shorts outdoor" },
+  "Breathable layered shirt": { brand: "The North Face", product: "Class V Explore Shirt", price: "~$55", icon: "👕", url: "https://www.thenorthface.com", searchTerm: "hiking shirt layer" },
+  "Light packable layer": { brand: "Patagonia", product: "Micro Puff Jacket", price: "~$259", icon: "🧥", url: "https://www.patagonia.com", searchTerm: "packable puffer jacket" },
+  "Rain shell": { brand: "Patagonia", product: "Torrentshell 3L Jacket", price: "~$189", icon: "🌧️", url: "https://www.patagonia.com", searchTerm: "rain jacket hiking" },
+  "Windbreaker": { brand: "The North Face", product: "Wind Jacket", price: "~$99", icon: "💨", url: "https://www.thenorthface.com", searchTerm: "windbreaker jacket outdoor" },
+  "Hiking boots (ankle support)": { brand: "Salomon", product: "X Ultra 4 Mid GTX", price: "~$150", icon: "🥾", url: "https://www.salomon.com", searchTerm: "hiking boots" },
+  "Trekking poles": { brand: "Black Diamond", product: "Trail Trekking Poles", price: "~$100", icon: "🥢", url: "https://www.blackdiamondequipment.com", searchTerm: "trekking poles hiking" },
+  "Trail runners / sneakers": { brand: "Merrell", product: "Moab 3", price: "~$120", icon: "👟", url: "https://www.merrell.com", searchTerm: "trail running shoes" },
+  "Moisture-wicking socks": { brand: "Darn Tough", product: "Hiker Micro Crew", price: "~$26", icon: "🧦", url: "https://darntough.com", searchTerm: "wool hiking socks" },
+  "Water (2L minimum)": { brand: "Nalgene / Hydro Flask", product: "Wide Mouth Bottle or Bladder", price: "~$20–$40", icon: "💧", url: "https://www.rei.com", searchTerm: "water bottle hiking" },
+  "Offline trail map": { brand: "AllTrails / Gaia GPS", product: "Offline Map Download", price: "Free–$36/yr", icon: "🗺️", url: "https://www.alltrails.com", searchTerm: "trail map compass" },
+  "Pack rain cover": { brand: "Osprey", product: "Ultralight Raincover", price: "~$35", icon: "☔", url: "https://www.osprey.com", searchTerm: "backpack rain cover" },
+  "Trail snacks / electrolytes": { brand: "Liquid I.V.", product: "Hydration Multiplier (16-pack)", price: "~$25", icon: "🍫", url: "https://www.liquid-iv.com", searchTerm: "trail snacks energy bars" },
+  "First-aid kit": { brand: "Adventure Medical Kits", product: "Ultralight/Watertight .7", price: "~$25", icon: "🩹", url: "https://www.adventuremedicalkits.com", searchTerm: "first aid kit outdoor" },
+};
+
+const FAVORITES_KEY = 'hikeio_favorites';
+const LAST_QUERY_KEY = 'hikeio_last_query';
+
+let currentWeather = null;
+let allTrailsWithDist = [];
+let leafletMap = null;
+let leafletMarker = null;
+let trailPathLayer = null;
+let currentTrail = null;
+const imageCache = {};
+
+let radarMap = null;
+let radarLayer = null;
+let radarFrames = [];
+let radarHost = '';
+let radarIndex = 0;
+let radarPlaying = false;
+let radarInterval = null;
+
+/* ---------------- Favorites ---------------- */
+function getFavorites() { try { return JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]'); } catch (e) { return []; } }
+function isFavorite(name) { return getFavorites().includes(name); }
+function toggleFavorite(name) {
+  let favs = getFavorites();
+  favs = favs.includes(name) ? favs.filter(n => n !== name) : [...favs, name];
+  localStorage.setItem(FAVORITES_KEY, JSON.stringify(favs));
+}
+
+/* ---------------- Helpers ---------------- */
+function haversineMiles(lat1, lon1, lat2, lon2) {
+  const R = 3958.8;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function setStatus(msg, isError, loading) {
+  const el = document.getElementById('statusLine');
+  el.style.display = 'flex';
+  el.className = 'status-line' + (isError ? ' error' : '');
+  el.innerHTML = (loading ? '<span class="spinner"></span>' : '') + msg;
+}
+
+function weatherEmoji(code) {
+  if (code === 0) return '☀️';
+  if ([1, 2].includes(code)) return '⛅';
+  if (code === 3) return '☁️';
+  if ([45, 48].includes(code)) return '🌫️';
+  if ([51, 53, 55, 56, 57].includes(code)) return '🌦️';
+  if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return '🌧️';
+  if ([71, 73, 75, 77, 85, 86].includes(code)) return '🌨️';
+  if ([95, 96, 99].includes(code)) return '⛈️';
+  return '🌡️';
+}
+
+/* ---------------- API calls ---------------- */
+async function geocode(query) {
+  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=1&country=US`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Geocoding request failed');
+  const data = await res.json();
+  if (!data.results || data.results.length === 0) throw new Error('Location not found');
+  const r = data.results[0];
+  return { lat: r.latitude, lon: r.longitude, label: `${r.name}, ${r.admin1 || ''}`.trim() };
+}
+
+async function reverseGeocode(lat, lon) {
+  try {
+    const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`;
+    const res = await fetch(url);
+    const data = await res.json();
+    return data.city || data.locality || 'Your location';
+  } catch (e) {
+    return 'Your location';
+  }
+}
+
+async function getWeather(lat, lon) {
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timezone=auto`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Weather request failed');
+  const data = await res.json();
+  const daily = data.daily.time.slice(0, 3).map((t, i) => ({
+    date: t,
+    code: data.daily.weather_code[i],
+    tempMax: Math.round(data.daily.temperature_2m_max[i]),
+    tempMin: Math.round(data.daily.temperature_2m_min[i]),
+    precipProb: data.daily.precipitation_probability_max[i],
+  }));
+  return {
+    currentTemp: Math.round(data.current.temperature_2m),
+    currentCode: data.current.weather_code,
+    tempMax: daily[0].tempMax,
+    tempMin: daily[0].tempMin,
+    precipProb: daily[0].precipProb,
+    windMax: Math.round(data.daily.wind_speed_10m_max[0]),
+    daily,
+  };
+}
+
+/* Pull a real, freely-licensed photo from Wikimedia Commons for a given search term */
+async function fetchImage(searchTerm) {
+  if (imageCache[searchTerm] !== undefined) return imageCache[searchTerm];
+  try {
+    const url = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(searchTerm)}&gsrlimit=1&gsrnamespace=6&prop=imageinfo&iiprop=url&iiurlwidth=500&format=json&origin=*`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const pages = data.query && data.query.pages;
+    if (!pages) { imageCache[searchTerm] = null; return null; }
+    const page = Object.values(pages)[0];
+    const imgUrl = page.imageinfo && page.imageinfo[0] && page.imageinfo[0].thumburl;
+    imageCache[searchTerm] = imgUrl || null;
+    return imgUrl || null;
+  } catch (e) {
+    imageCache[searchTerm] = null;
+    return null;
+  }
+}
+
+/* Pull the real trail path geometry from OpenStreetMap via the Overpass API */
+async function fetchTrailPath(trail) {
+  const key = `path::${trail.name}`;
+  if (imageCache[key] !== undefined) return imageCache[key];
+  try {
+    const query = `[out:json][timeout:15];(way["highway"~"path|footway|track"](around:700,${trail.lat},${trail.lon}););out geom;`;
+    const url = 'https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(query);
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!data.elements || data.elements.length === 0) { imageCache[key] = null; return null; }
+    let best = null;
+    for (const el of data.elements) {
+      if (el.geometry && (!best || el.geometry.length > best.geometry.length)) best = el;
+    }
+    if (!best || !best.geometry) { imageCache[key] = null; return null; }
+    const coords = best.geometry.map(pt => [pt.lat, pt.lon]);
+    imageCache[key] = coords;
+    return coords;
+  } catch (e) {
+    imageCache[key] = null;
+    return null;
+  }
+}
+
+/* ---------------- Gear rules engine ---------------- */
+function buildGear(weather, trail) {
+  const clothing = [];
+  const footwear = [];
+  const extras = [];
+
+  if (weather.tempMin < 40) {
+    clothing.push({ item: "Insulated jacket", tag: "essential" });
+    clothing.push({ item: "Thermal base layer", tag: "essential" });
+    clothing.push({ item: "Warm hat & gloves", tag: "recommended" });
+  } else if (weather.tempMax > 82) {
+    clothing.push({ item: "Moisture-wicking shirt", tag: "essential" });
+    clothing.push({ item: "Sun hat", tag: "recommended" });
+    clothing.push({ item: "Lightweight shorts", tag: "recommended" });
+  } else {
+    clothing.push({ item: "Breathable layered shirt", tag: "essential" });
+    clothing.push({ item: "Light packable layer", tag: "recommended" });
+  }
+  if (weather.precipProb > 40) clothing.push({ item: "Rain shell", tag: "essential" });
+  if (weather.windMax > 15) clothing.push({ item: "Windbreaker", tag: "recommended" });
+
+  if (trail.elevation > 300 || trail.distance > 5) {
+    footwear.push({ item: "Hiking boots (ankle support)", tag: "essential" });
+    footwear.push({ item: "Trekking poles", tag: "recommended" });
+  } else {
+    footwear.push({ item: "Trail runners / sneakers", tag: "essential" });
+  }
+  footwear.push({ item: "Moisture-wicking socks", tag: "recommended" });
+
+  extras.push({ item: "Water (2L minimum)", tag: "essential" });
+  extras.push({ item: "Offline trail map", tag: "essential" });
+  if (weather.precipProb > 40) extras.push({ item: "Pack rain cover", tag: "recommended" });
+  if (trail.distance > 4) extras.push({ item: "Trail snacks / electrolytes", tag: "recommended" });
+  if (trail.elevation > 350) extras.push({ item: "First-aid kit", tag: "recommended" });
+
+  return [...clothing, ...footwear, ...extras];
+}
+
+/* ---------------- Rendering: weather + forecast ---------------- */
+function difficultyClass(d) { return d === 'easy' ? 'diff-easy' : d === 'hard' ? 'diff-hard' : 'diff-moderate'; }
+
+function renderWeather(weather, label) {
+  const card = document.getElementById('weatherCard');
+  card.classList.add('show');
+  const dayNames = weather.daily.map(d => new Date(d.date + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short' }));
+  card.innerHTML = `
+    <div class="weather-top">
+      <div class="weather-emoji">${weatherEmoji(weather.currentCode)}</div>
+      <div class="weather-stat"><span class="label">Location</span><span class="val">${label}</span></div>
+      <div class="weather-stat"><span class="label">Now</span><span class="val mono">${weather.currentTemp}°F</span></div>
+      <div class="weather-stat"><span class="label">Today's range</span><span class="val mono">${weather.tempMin}°–${weather.tempMax}°F</span></div>
+      <div class="weather-stat"><span class="label">Rain chance</span><span class="val mono">${weather.precipProb}%</span></div>
+      <div class="weather-stat"><span class="label">Wind</span><span class="val mono">${weather.windMax} mph</span></div>
+    </div>
+    <div class="forecast-strip">
+      ${weather.daily.map((d, i) => `
+        <div class="forecast-day">
+          <div class="d">${i === 0 ? 'Today' : dayNames[i]}</div>
+          <div class="e">${weatherEmoji(d.code)}</div>
+          <div class="t">${d.tempMin}°–${d.tempMax}°F</div>
+          <div class="p">${d.precipProb}% rain</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+/* ---------------- Radar ---------------- */
+async function initRadar(lat, lon) {
+  document.getElementById('radarSection').style.display = 'block';
+  if (!radarMap) {
+    radarMap = L.map('radarMapContainer').setView([lat, lon], 7);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors', maxZoom: 18
+    }).addTo(radarMap);
+  } else {
+    radarMap.setView([lat, lon], 7);
+  }
+  setTimeout(() => radarMap.invalidateSize(), 150);
+
+  if (radarPlaying) { clearInterval(radarInterval); radarPlaying = false; document.getElementById('radarPlay').textContent = '▶ Play'; }
+
+  try {
+    const res = await fetch('https://api.rainviewer.com/public/weather-maps.json');
+    const data = await res.json();
+    radarHost = data.host;
+    radarFrames = [...(data.radar.past || []), ...(data.radar.nowcast || [])];
+    if (radarFrames.length === 0) return;
+    radarIndex = (data.radar.past || []).length - 1;
+    document.getElementById('radarSlider').max = radarFrames.length - 1;
+    showRadarFrame(radarIndex);
+  } catch (e) {
+    // Radar is a bonus layer — fail quietly if RainViewer is unreachable.
+  }
+}
+
+function showRadarFrame(i) {
+  if (!radarFrames[i] || !radarMap) return;
+  radarIndex = i;
+  const frame = radarFrames[i];
+  const url = `${radarHost}${frame.path}/256/{z}/{x}/{y}/2/1_1.png`;
+  if (radarLayer) radarMap.removeLayer(radarLayer);
+  radarLayer = L.tileLayer(url, { opacity: 0.65 }).addTo(radarMap);
+  const d = new Date(frame.time * 1000);
+  document.getElementById('radarTimeLabel').textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  document.getElementById('radarSlider').value = i;
+}
+
+document.getElementById('radarSlider').addEventListener('input', (e) => showRadarFrame(parseInt(e.target.value, 10)));
+document.getElementById('radarPlay').addEventListener('click', () => {
+  radarPlaying = !radarPlaying;
+  document.getElementById('radarPlay').textContent = radarPlaying ? '⏸ Pause' : '▶ Play';
+  if (radarPlaying) {
+    radarInterval = setInterval(() => {
+      const next = radarIndex + 1 >= radarFrames.length ? 0 : radarIndex + 1;
+      showRadarFrame(next);
+    }, 600);
+  } else {
+    clearInterval(radarInterval);
+  }
+});
+
+/* ---------------- Filters + trail grid ---------------- */
+function getFilters() {
+  const activeDiffs = Array.from(document.querySelectorAll('.chip[data-diff].active')).map(c => c.dataset.diff);
+  const maxDist = parseInt(document.getElementById('distanceSlider').value, 10);
+  const favOnly = document.getElementById('favChip').classList.contains('active');
+  return { activeDiffs, maxDist, favOnly };
+}
+
+function renderTrails() {
+  const list = document.getElementById('trailList');
+  const { activeDiffs, maxDist, favOnly } = getFilters();
+
+  const filtered = allTrailsWithDist
+    .filter(t => activeDiffs.includes(t.difficulty) && t.distFromUser <= maxDist && (!favOnly || isFavorite(t.name)))
+    .sort((a, b) => a.distFromUser - b.distFromUser);
+
+  list.innerHTML = '';
+  if (filtered.length === 0) {
+    list.innerHTML = '<div class="no-results">No trails match those filters — try widening the distance or difficulty.</div>';
+    return;
+  }
+
+  filtered.forEach((t, i) => {
+    const card = document.createElement('div');
+    card.className = 'trail-card';
+    card.style.animationDelay = (i * 0.05) + 's';
+    card.tabIndex = 0;
+    const fav = isFavorite(t.name);
+    card.innerHTML = `
+      <div class="trail-img-wrap">
+        <button class="fav-btn ${fav ? 'active' : ''}" data-role="favbtn" type="button" aria-label="Save trail">${fav ? '★' : '☆'}</button>
+        <div class="placeholder-icon">🏞️</div>
+        <img alt="${t.name}" data-role="trailimg">
+        <div class="open-hint">🔍 Click to open trip planner</div>
+      </div>
+      <div class="trail-card-body">
+        <div class="trail-card-top">
+          <div><h3>${t.name}</h3><div class="trail-park">${t.park}</div></div>
+          <span class="diff-tag ${difficultyClass(t.difficulty)}">${t.difficulty}</span>
+        </div>
+        <div class="trail-stats">
+          <span><span class="n mono">${t.distance} mi</span><span class="l">Distance</span></span>
+          <span><span class="n mono">${t.elevation} ft</span><span class="l">Elev. gain</span></span>
+        </div>
+        <div class="trail-dist">${t.distFromUser.toFixed(1)} mi from you</div>
+      </div>
+    `;
+    const imgEl = card.querySelector('[data-role="trailimg"]');
+    const favBtn = card.querySelector('[data-role="favbtn"]');
+    card.addEventListener('click', () => openTrailGui(t));
+    card.addEventListener('keypress', (e) => { if (e.key === 'Enter') openTrailGui(t); });
+    favBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleFavorite(t.name);
+      const nowFav = isFavorite(t.name);
+      favBtn.classList.toggle('active', nowFav);
+      favBtn.textContent = nowFav ? '★' : '☆';
+      if (getFilters().favOnly) renderTrails();
+    });
+
+    fetchImage(t.park).then(url => {
+      if (url) { imgEl.src = url; imgEl.onload = () => imgEl.classList.add('loaded'); }
+    });
+
+    list.appendChild(card);
+  });
+}
+
+/* ---------------- Click-through trail GUI ---------------- */
+function gearPhotoCard(g, index) {
+  const catalog = GEAR_CATALOG[g.item] || {};
+  const cardId = `gear-${index}`;
+  setTimeout(() => {
+    const el = document.getElementById(cardId);
+    if (!el || !catalog.searchTerm) return;
+    fetchImage(catalog.searchTerm).then(url => {
+      const img = el.querySelector('img');
+      if (url && img) { img.src = url; img.onload = () => img.classList.add('loaded'); }
+    });
+  }, 0);
+  return `
+    <div class="gear-photo-card" id="${cardId}">
+      <div class="gear-photo-wrap">
+        <div class="icon-fallback">${catalog.icon || '🎒'}</div>
+        <img alt="${g.item}">
+      </div>
+      <div class="gear-card-body">
+        <div class="gear-card-top">
+          <span class="gear-name">${g.item}</span>
+          <span class="gear-tag ${g.tag === 'essential' ? 'tag-essential' : 'tag-recommended'}">${g.tag}</span>
+        </div>
+        ${catalog.brand ? `<div class="gear-brand-line"><a href="${catalog.url}" target="_blank" rel="noopener">${catalog.brand} ${catalog.product}</a><br><span class="gear-price">${catalog.price}</span></div>` : ''}
+      </div>
+    </div>`;
+}
+
+function renderCampCard(trail) {
+  const camp = CAMPGROUNDS[trail.campground];
+  if (!camp) {
+    return `<div class="no-camp">No campground located directly within this park — check nearby state parks for overnight options.</div>`;
+  }
+  const cardId = 'camp-card';
+  setTimeout(() => {
+    const el = document.getElementById(cardId);
+    if (!el) return;
+    fetchImage(camp.searchTerm).then(url => {
+      const img = el.querySelector('img');
+      if (url && img) { img.src = url; img.onload = () => img.classList.add('loaded'); }
+    });
+  }, 0);
+  return `
+    <div class="camp-photo-card" id="${cardId}">
+      <div class="camp-photo-wrap"><img alt="${camp.name}"></div>
+      <div class="camp-card-body">
+        <h4>${camp.name}</h4>
+        <div class="camp-amenities">${camp.amenities.map(a => `<span class="amenity">${a}</span>`).join('')}</div>
+      </div>
+    </div>`;
+}
+
+function updateGuiFavButton(trail) {
+  const btn = document.getElementById('guiFavBtn');
+  const fav = isFavorite(trail.name);
+  btn.classList.toggle('active', fav);
+}
+
+function openTrailGui(trail) {
+  currentTrail = trail;
+  document.getElementById('guiTitle').textContent = trail.name;
+  document.getElementById('guiSub').textContent = `${trail.park} · ${trail.distance} mi · ${trail.elevation} ft gain · ${trail.difficulty}`;
+  document.getElementById('directionsBtn').href = `https://www.google.com/maps/dir/?api=1&destination=${trail.lat},${trail.lon}`;
+  updateGuiFavButton(trail);
+
+  const gear = buildGear(currentWeather, trail);
+  document.getElementById('gearGrid').innerHTML = gear.map((g, i) => gearPhotoCard(g, i)).join('');
+  document.getElementById('campSection').innerHTML = renderCampCard(trail);
+
+  const overlay = document.getElementById('trailModalOverlay');
+  overlay.classList.add('show');
+  document.body.classList.add('modal-open');
+  document.querySelector('.gui-scroll').scrollTop = 0;
+
+  if (!leafletMap) {
+    leafletMap = L.map('guiMap').setView([trail.lat, trail.lon], 14);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors', maxZoom: 18
+    }).addTo(leafletMap);
+    leafletMarker = L.marker([trail.lat, trail.lon]).addTo(leafletMap);
+  } else {
+    leafletMap.setView([trail.lat, trail.lon], 14);
+    leafletMarker.setLatLng([trail.lat, trail.lon]);
+  }
+  if (trailPathLayer) { leafletMap.removeLayer(trailPathLayer); trailPathLayer = null; }
+  setTimeout(() => leafletMap.invalidateSize(), 150);
+
+  fetchTrailPath(trail).then(coords => {
+    if (currentTrail !== trail || !coords || !leafletMap) return;
+    trailPathLayer = L.polyline(coords, { color: '#C0392B', weight: 4, opacity: 0.85 }).addTo(leafletMap);
+    leafletMap.fitBounds(trailPathLayer.getBounds(), { padding: [24, 24] });
+  });
+}
+
+function closeTrailGui() {
+  document.getElementById('trailModalOverlay').classList.remove('show');
+  document.body.classList.remove('modal-open');
+}
+document.getElementById('guiClose').addEventListener('click', closeTrailGui);
+document.getElementById('guiFavBtn').addEventListener('click', () => {
+  if (!currentTrail) return;
+  toggleFavorite(currentTrail.name);
+  updateGuiFavButton(currentTrail);
+  renderTrails();
+});
+document.getElementById('trailModalOverlay').addEventListener('click', (e) => { if (e.target.id === 'trailModalOverlay') closeTrailGui(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeTrailGui(); });
+
+/* ---------------- Filter controls ---------------- */
+document.querySelectorAll('.chip[data-diff]').forEach(chip => {
+  chip.addEventListener('click', () => { chip.classList.toggle('active'); renderTrails(); });
+});
+document.getElementById('favChip').addEventListener('click', (e) => {
+  e.currentTarget.classList.toggle('active');
+  renderTrails();
+});
+document.getElementById('distanceSlider').addEventListener('input', (e) => {
+  document.getElementById('distanceVal').textContent = e.target.value + ' mi';
+  renderTrails();
+});
+
+/* ---------------- Search flow ---------------- */
+async function runSearchCore(lat, lon, label, queryToRemember) {
+  document.getElementById('trailSection').style.display = 'none';
+  document.getElementById('filterBar').classList.remove('show');
+  document.getElementById('weatherCard').classList.remove('show');
+  setStatus('Pulling live weather…', false, true);
+
+  try {
+    const weather = await getWeather(lat, lon);
+    currentWeather = weather;
+    renderWeather(weather, label);
+    initRadar(lat, lon);
+
+    allTrailsWithDist = TRAILS.map(t => ({ ...t, distFromUser: haversineMiles(lat, lon, t.lat, t.lon) }));
+    document.getElementById('trailSection').style.display = 'block';
+    document.getElementById('filterBar').classList.add('show');
+    document.getElementById('distanceSlider').value = 150;
+    document.getElementById('distanceVal').textContent = '150 mi';
+    document.querySelectorAll('.chip[data-diff]').forEach(c => c.classList.add('active'));
+    document.getElementById('favChip').classList.remove('active');
+    renderTrails();
+    setStatus(`Showing trails nearest to ${label}.`, false, false);
+    if (queryToRemember) localStorage.setItem(LAST_QUERY_KEY, queryToRemember);
+  } catch (err) {
+    setStatus(`Couldn't complete that search: ${err.message}`, true, false);
+  }
+}
+
+async function runSearch() {
+  const query = document.getElementById('locationInput').value.trim();
+  if (!query) { setStatus('Enter a city or zip code to get started.', true); return; }
+  setStatus('Looking up location…', false, true);
+  try {
+    const loc = await geocode(query);
+    await runSearchCore(loc.lat, loc.lon, loc.label, query);
+  } catch (err) {
+    setStatus(`Couldn't complete that search: ${err.message}`, true, false);
+  }
+}
+
+function runSearchFromCoords() {
+  if (!navigator.geolocation) { setStatus('Location access is not supported by this browser.', true); return; }
+  setStatus('Getting your location…', false, true);
+  navigator.geolocation.getCurrentPosition(async (pos) => {
+    const { latitude, longitude } = pos.coords;
+    setStatus('Looking up your location…', false, true);
+    const label = await reverseGeocode(latitude, longitude);
+    document.getElementById('locationInput').value = label;
+    await runSearchCore(latitude, longitude, label, label);
+  }, () => {
+    setStatus('Could not get your location — check your browser/location permissions.', true);
+  }, { timeout: 8000 });
+}
+
+document.getElementById('searchBtn').addEventListener('click', runSearch);
+document.getElementById('locBtn').addEventListener('click', runSearchFromCoords);
+document.getElementById('locationInput').addEventListener('keypress', (e) => { if (e.key === 'Enter') runSearch(); });
+
+/* Remember + restore last search */
+window.addEventListener('DOMContentLoaded', () => {
+  const last = localStorage.getItem(LAST_QUERY_KEY);
+  if (last) {
+    document.getElementById('locationInput').value = last;
+    runSearch();
+  }
+});
+
+/* ---------------- Offline detection ---------------- */
+function updateOfflineBanner() {
+  document.getElementById('offlineBanner').classList.toggle('show', !navigator.onLine);
+}
+window.addEventListener('online', updateOfflineBanner);
+window.addEventListener('offline', updateOfflineBanner);
+updateOfflineBanner();
+
+/* ---------------- Service worker registration (enables home-screen install + offline caching) ---------------- */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch((err) => console.warn('Service worker registration failed:', err));
+  });
+}
+</script>
+</body>
+</html>
